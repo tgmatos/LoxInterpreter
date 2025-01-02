@@ -103,7 +103,7 @@ pub const Scanner = struct {
             // Strings
             '"' => try self.parseString(),
             else => {
-                if (isNumber(c)) {
+                if (isDigit(c)) {
                     try self.parseNumber();
                 } else if (isAlpha(c)) {
                     try self.identifier();
@@ -114,7 +114,7 @@ pub const Scanner = struct {
         }
     }
 
-    fn isNumber(char: u8) bool {
+    fn isDigit(char: u8) bool {
         return char >= '0' and char <= '9';
     }
 
@@ -129,7 +129,7 @@ pub const Scanner = struct {
     }
 
     fn isAlphaNumeric(c: u8) bool {
-        return isAlpha(c) or isNumber(c);
+        return isAlpha(c) or isDigit(c);
     }
 
     fn addTokenSingle(self: *Self, kind: T.TokenType, character: []const u8) !void {
@@ -180,14 +180,14 @@ pub const Scanner = struct {
     }
 
     fn parseNumber(self: *Self) !void {
-        while ((self.current < self.source.len) and (isNumber(self.source[self.current]))) {
+        while (!self.isAtEnd() and isDigit(self.source[self.current])) {
             self.current += 1;
         }
 
-        if (!self.isAtEnd() and (self.source[self.current] == '.') and (isNumber(self.source[self.current + 1]))) {
+        if (!self.isAtEnd() and (self.source[self.current] == '.') and isDigit(self.source[self.current + 1])) {
             self.current += 1;
 
-            while (!self.isAtEnd() and isNumber(self.source[self.current])) {
+            while (!self.isAtEnd() and isDigit(self.source[self.current])) {
                 self.current += 1;
             }
         }
@@ -196,6 +196,7 @@ pub const Scanner = struct {
         const number = try std.fmt.parseFloat(f64, number_str);
         const literal = Literal{ .floatLiteral = number };
         try self.addToken(TokenType.NUMBER, literal);
+        self.current -= 1;
     }
 
     fn identifier(self: *Self) !void {

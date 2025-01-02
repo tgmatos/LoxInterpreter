@@ -100,7 +100,7 @@ test "Test Keywords" {
 
     const allocator = gpa.allocator();
 
-    const source = "fun ({}){3 + 1}";
+    const source = "1 - (2 * 3) < 4 == false";
 
     var scanner = try Scanner.init(allocator, source);
     defer scanner.deinit();
