@@ -9,11 +9,14 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const source = "()";
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
-    std.debug.print("Size of the tokens: {d}\n{any}\n{any}\n{any}", .{ ts.items.len, ts.items[0], ts.items[1], ts.items[2] });
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
+    for (ts.items) |item| {
+        std.debug.print("{any}\n", .{item});
+    }
 
     // try runPrompt();
     // if (std.os.argv.len > 1) {

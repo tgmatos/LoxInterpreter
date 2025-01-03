@@ -45,6 +45,7 @@ pub const TokenType = enum {
     VAR,
     WHILE,
     EOF,
+    ERROR,
 };
 
 pub const Literal = union(enum) { stringLiteral: []const u8, floatLiteral: f64 };

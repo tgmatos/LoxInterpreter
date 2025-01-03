@@ -10,11 +10,11 @@ test "Test Parse Error" {
     const allocator = gpa.allocator();
 
     const source = "(+)^";
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
-    _ = ts;
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
 }
 
 test "Test All Possibilities" {
@@ -30,10 +30,11 @@ test "Test All Possibilities" {
         \\!*+-/=<> <= == // operators
     ;
 
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
     for (ts.items) |item| {
         std.debug.print("{any}\n", .{item});
     }
@@ -48,10 +49,11 @@ test "Test Strings" {
 
     const source = "\"testando\"";
 
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
     for (ts.items) |item| {
         std.debug.print("{any}\n", .{item});
     }
@@ -66,10 +68,11 @@ test "Test String Error Parsing" {
 
     const source = "\"testando";
 
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
     for (ts.items) |item| {
         std.debug.print("{any}\n", .{item});
     }
@@ -84,10 +87,11 @@ test "Test Numbers" {
 
     const source = "1.337";
 
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
     for (ts.items) |item| {
         std.debug.print("{any}\n", .{item});
     }
@@ -102,10 +106,11 @@ test "Test Keywords" {
 
     const source = "1 - (2 * 3) < 4 == false";
 
-    var scanner = try Scanner.init(allocator, source);
+    var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens();
+    const ts = try scanner.scanTokens(allocator, source);
+    defer ts.deinit();
     for (ts.items) |item| {
         std.debug.print("{any}\n", .{item});
     }

@@ -6,14 +6,13 @@ const Literal = T.Literal;
 
 pub const Scanner = struct {
     const Self = @This();
-    source: []const u8,
     tokens: std.ArrayList(Token),
     keywords: std.StringHashMap(TokenType),
     start: u32,
     current: u32,
     line: u32,
 
-    pub fn init(allocator: std.mem.Allocator, source: []const u8) !Scanner {
+    pub fn init(allocator: std.mem.Allocator) !Scanner {
         var hashmap = std.StringHashMap(TokenType).init(allocator);
         try hashmap.put("and", TokenType.AND);
         try hashmap.put("class", TokenType.CLASS);
@@ -32,7 +31,7 @@ pub const Scanner = struct {
         try hashmap.put("var", TokenType.VAR);
         try hashmap.put("while", TokenType.WHILE);
 
-        return .{ .source = source, .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap };
+        return .{ .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap };
     }
 
     pub fn deinit(self: *Self) void {
@@ -40,86 +39,110 @@ pub const Scanner = struct {
         self.keywords.deinit();
     }
 
-    pub fn scanTokens(self: *Self) !std.ArrayList(Token) {
-        while (self.current < self.source.len) {
-            self.start = self.current;
-            try scanToken(self);
+    pub fn scanTokens(self: *Self, allocator: std.mem.Allocator, source: []const u8) !std.ArrayList(Token) {
+        var tokens = std.ArrayList(Token).init(allocator);
+        while (self.current < source.len) {
+            const token = scanToken(self, source);
+            if (token) |t| {
+                try tokens.append(t);
+            }
             self.current += 1;
         }
 
-        const eof = Token.init(T.TokenType.EOF, "", null, self.line);
-        try self.tokens.append(eof);
-        return self.tokens;
+        const eof = Token{ .kind = .EOF, .lexeme = "", .line = self.line, .literal = null };
+        try tokens.append(eof);
+        return tokens;
     }
 
-    fn scanToken(self: *Self) !void {
-        const c: u8 = self.source[self.current];
-        switch (c) {
+    fn scanToken(self: *Self, source: []const u8) ?Token {
+        var b = true;
+        while (!self.isAtEnd(source) and b) {
+            b = self.parseWhitespace(source, source[self.current]);
+        }
+
+        if (self.isAtEnd(source)) {
+            return null;
+        }
+
+        self.start = self.current;
+        const c: u8 = source[self.current];
+        return switch (c) {
             // One char tokens
-            '(' => try self.addTokenSingle(TokenType.LEFT_PAREN, "("),
-            ')' => try self.addTokenSingle(TokenType.RIGHT_PAREN, ")"),
-            '{' => try self.addTokenSingle(TokenType.LEFT_BRACE, "{"),
-            '}' => try self.addTokenSingle(TokenType.RIGHT_BRACE, "}"),
-            ',' => try self.addTokenSingle(TokenType.COMMA, ","),
-            '.' => try self.addTokenSingle(TokenType.DOT, "."),
-            '-' => try self.addTokenSingle(TokenType.MINUS, "-"),
-            '+' => try self.addTokenSingle(TokenType.PLUS, "+"),
-            ';' => try self.addTokenSingle(TokenType.SEMICOLON, ";"),
-            '*' => try self.addTokenSingle(TokenType.STAR, "*"),
+            '(' => self.makeTokenSingle(.LEFT_PAREN, source),
+            ')' => self.makeTokenSingle(.RIGHT_PAREN, source),
+            '{' => self.makeTokenSingle(.LEFT_BRACE, source),
+            '}' => self.makeTokenSingle(.RIGHT_BRACE, source),
+            ',' => self.makeTokenSingle(.COMMA, source),
+            '.' => self.makeTokenSingle(.DOT, source),
+            '-' => self.makeTokenSingle(.MINUS, source),
+            '+' => self.makeTokenSingle(.PLUS, source),
+            ';' => self.makeTokenSingle(.SEMICOLON, source),
+            '*' => self.makeTokenSingle(.STAR, source),
 
             // Two char tokens
             '!' => {
-                const token = if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG;
-                try self.addTokenSingle(token, "!=");
+                const token = if (self.match(source, '=')) TokenType.BANG_EQUAL else TokenType.BANG;
+                return self.makeTokenSingle(token, source);
             },
             '=' => {
-                const token = if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG;
-                try self.addTokenSingle(token, "==");
+                const token = if (self.match(source, '=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL;
+                return self.makeTokenSingle(token, source);
             },
             '<' => {
-                const token = if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG;
-                try self.addTokenSingle(token, "<=");
+                const token = if (self.match(source, '=')) TokenType.LESS_EQUAL else TokenType.LESS;
+                return self.makeTokenSingle(token, source);
             },
             '>' => {
-                const token = if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG;
-                try self.addTokenSingle(token, ">=");
+                const token = if (self.match(source, '=')) TokenType.GREATER_EQUAL else TokenType.GREATER;
+                return self.makeTokenSingle(token, source);
             },
 
             // Slash and comments
-            '/' => {
-                if (self.match('/')) {
-                    while ((self.current < self.source.len) and (self.source[self.current] != '\n')) {
-                        self.current += 1;
-                    }
-                } else {
-                    try self.addTokenSingle(TokenType.SLASH, "/");
-                }
-            },
-
-            // whitespaces
-            ' ', '\r', '\t' => undefined,
-            '\n' => self.line += 1,
+            '/' => return self.makeTokenSingle(.SLASH, source),
 
             // Strings
-            '"' => try self.parseString(),
+            '"' => self.parseString(source),
             else => {
                 if (isDigit(c)) {
-                    try self.parseNumber();
+                    return self.parseNumber(source);
                 } else if (isAlpha(c)) {
-                    try self.identifier();
+                    return self.identifier(source);
                 } else {
                     report(self.line, "", "Unexpected character.");
+                    return Token{ .kind = TokenType.ERROR, .lexeme = "", .line = self.line, .literal = null };
                 }
             },
+        };
+    }
+
+    fn parseWhitespace(self: *Self, source: []const u8, c: u8) bool {
+        if (c == '/' and source[self.current + 1] == '/') {
+            // !self.isAtEnd(source) and
+            while (!self.isAtEnd(source) and
+                source[self.current] != '\n')
+            {
+                self.current += 1;
+            }
+            self.line += 1;
+            return true;
+        } else if (c == ' ' or c == '\r' or c == '\t') {
+            self.current += 1;
+            return true;
+        } else if (c == '\n') {
+            self.current += 1;
+            self.line += 1;
+            return true;
         }
+
+        return false;
     }
 
     fn isDigit(char: u8) bool {
         return char >= '0' and char <= '9';
     }
 
-    fn isAtEnd(self: *Self) bool {
-        return self.current >= self.source.len;
+    fn isAtEnd(self: *Self, source: []const u8) bool {
+        return self.current >= source.len;
     }
 
     fn isAlpha(c: u8) bool {
@@ -132,23 +155,20 @@ pub const Scanner = struct {
         return isAlpha(c) or isDigit(c);
     }
 
-    fn addTokenSingle(self: *Self, kind: T.TokenType, character: []const u8) !void {
-        const token = Token.init(kind, character, null, self.line);
-        try self.tokens.append(token);
+    fn makeTokenSingle(self: *Self, kind: T.TokenType, source: []const u8) Token {
+        return Token{ .kind = kind, .lexeme = source[self.start..self.current], .line = self.line, .literal = null };
     }
 
-    fn addToken(self: *Self, kind: T.TokenType, value: Literal) !void {
-        const token = Token.init(kind, "", value, self.line);
-        try self.tokens.append(token);
+    fn makeToken(self: *Self, kind: T.TokenType, value: Literal) Token {
+        return Token{ .kind = kind, .literal = value, .lexeme = "", .line = self.line };
     }
 
-    fn addKeywordToken(self: *Self, kind: T.TokenType) !void {
-        const token = Token.init(kind, "", null, self.line);
-        try self.tokens.append(token);
+    fn makeKeywordToken(self: *Self, kind: T.TokenType) Token {
+        return Token{ .kind = kind, .lexeme = "", .line = self.line, .literal = null };
     }
 
-    fn match(self: *Self, expected: u8) bool {
-        if ((self.current >= self.source.len) or self.source[self.current + 1] != expected) {
+    fn match(self: *Self, source: []const u8, expected: u8) bool {
+        if ((self.current >= source.len) or source[self.current + 1] != expected) {
             return false;
         }
         self.current += 1;
@@ -156,56 +176,64 @@ pub const Scanner = struct {
     }
 
     fn report(line: u32, where: []const u8, message: []const u8) void {
-        std.debug.print("[line {d}] Error {s}: {s}\n", .{ line, where, message });
+        std.log.err("[line {d}] Error {s}: {s}\n", .{ line, where, message });
     }
 
-    fn parseString(self: *Self) !void {
-        while ((self.current + 1 < self.source.len) and (self.source[self.current + 1] != '"')) {
-            if (self.source[self.current + 1] == '\n') {
+    fn parseString(self: *Self, source: []const u8) Token {
+        while ((self.current + 1 < source.len) and (source[self.current + 1] != '"')) {
+            if (source[self.current + 1] == '\n') {
                 self.line += 1;
             }
             self.current += 1;
         }
 
-        if (self.current + 1 >= self.source.len) {
+        if (self.current + 1 >= source.len) {
             report(self.line, "", "Unterminated string");
-            return;
+            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
         }
 
         self.current += 1;
-        const str = self.source[self.start + 1 .. self.current - 1];
-
+        const str = source[self.start + 1 .. self.current - 1];
         const value = Literal{ .stringLiteral = str };
-        try self.addToken(TokenType.STRING, value);
+        return self.makeToken(TokenType.STRING, value);
     }
 
-    fn parseNumber(self: *Self) !void {
-        while (!self.isAtEnd() and isDigit(self.source[self.current])) {
+    fn parseNumber(self: *Self, source: []const u8) Token {
+        while (!self.isAtEnd(source) and isDigit(source[self.current])) {
             self.current += 1;
         }
 
-        if (!self.isAtEnd() and (self.source[self.current] == '.') and isDigit(self.source[self.current + 1])) {
+        if (!self.isAtEnd(source) and (source[self.current] == '.') and isDigit(source[self.current + 1])) {
             self.current += 1;
 
-            while (!self.isAtEnd() and isDigit(self.source[self.current])) {
+            while (!self.isAtEnd(source) and isDigit(source[self.current])) {
                 self.current += 1;
             }
         }
 
-        const number_str = self.source[self.start..self.current];
-        const number = try std.fmt.parseFloat(f64, number_str);
+        const number_str = source[self.start..self.current];
+        std.debug.print("Number {d}\n", .{number_str});
+        const number = std.fmt.parseFloat(f64, number_str) catch {
+            report(self.line, "", "Number invalid");
+            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
+        };
         const literal = Literal{ .floatLiteral = number };
-        try self.addToken(TokenType.NUMBER, literal);
         self.current -= 1;
+        return self.makeToken(TokenType.NUMBER, literal);
     }
 
-    fn identifier(self: *Self) !void {
-        while (!self.isAtEnd() and isAlphaNumeric(self.source[self.current])) {
+    fn identifier(self: *Self, source: []const u8) Token {
+        while (!self.isAtEnd(source) and isAlphaNumeric(source[self.current])) {
             self.current += 1;
         }
 
-        const str = self.source[self.start..self.current];
-        const ttype: TokenType = self.keywords.get(str).?; // handle null
-        try self.addKeywordToken(ttype);
+        const str = source[self.start..self.current];
+        const ttype = self.keywords.get(str); // handle null
+        if (ttype) |tokentype| {
+            return self.makeKeywordToken(tokentype);
+        } else {
+            report(self.line, "", "Invalid Identifier");
+            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
+        }
     }
 };
