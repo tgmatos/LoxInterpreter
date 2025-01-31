@@ -12,6 +12,7 @@ pub const Scanner = struct {
     current: u32,
     line: u32,
 
+    // Todo: Change the hashmap to a comptime hash map.
     pub fn init(allocator: std.mem.Allocator) !Scanner {
         var hashmap = std.StringHashMap(TokenType).init(allocator);
         try hashmap.put("and", TokenType.AND);
@@ -117,7 +118,6 @@ pub const Scanner = struct {
 
     fn parseWhitespace(self: *Self, source: []const u8, c: u8) bool {
         if (c == '/' and source[self.current + 1] == '/') {
-            // !self.isAtEnd(source) and
             while (!self.isAtEnd(source) and
                 source[self.current] != '\n')
             {
@@ -193,8 +193,8 @@ pub const Scanner = struct {
         }
 
         self.current += 1;
-        const str = source[self.start + 1 .. self.current - 1];
-        const value = Literal{ .stringLiteral = str };
+        const str = source[self.start + 1 .. self.current];
+        const value = Literal{ .string = str };
         return self.makeToken(TokenType.STRING, value);
     }
 
@@ -212,12 +212,11 @@ pub const Scanner = struct {
         }
 
         const number_str = source[self.start..self.current];
-        std.debug.print("Number {d}\n", .{number_str});
         const number = std.fmt.parseFloat(f64, number_str) catch {
             report(self.line, "", "Number invalid");
             return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
         };
-        const literal = Literal{ .floatLiteral = number };
+        const literal = Literal{ .number = number };
         self.current -= 1;
         return self.makeToken(TokenType.NUMBER, literal);
     }

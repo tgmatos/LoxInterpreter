@@ -1,24 +1,25 @@
 const std = @import("std");
-const Token = @import("token.zig");
+const token = @import("token.zig");
 const Scanner = @import("scanner.zig").Scanner;
+const Parser = @import("parser.zig").Parser;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // defer _ = gpa.deinit();
 
-    const allocator = gpa.allocator();
+    // const allocator = gpa.allocator();
 
-    const source = "()";
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+    // const source = "()";
+    // var scanner = try Scanner.init(allocator);
+    // defer scanner.deinit();
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
-    for (ts.items) |item| {
-        std.debug.print("{any}\n", .{item});
-    }
+    // const ts = try scanner.scanTokens(allocator, source);
+    // defer ts.deinit();
+    // for (ts.items) |item| {
+    //     std.debug.print("{any}\n", .{item});
+    // }
 
-    // try runPrompt();
+    try runPrompt();
     // if (std.os.argv.len > 1) {
     //     std.debug.print("Usage: lox [script]\n", .{});
     //     std.os.linux.exit(64);
@@ -36,6 +37,10 @@ fn run(source: []u8) void {
 }
 
 fn runPrompt() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
     const stdin = std.io.getStdIn();
     var buf_reader = std.io.bufferedReader(stdin.reader());
     var input = buf_reader.reader();
@@ -43,8 +48,16 @@ fn runPrompt() !void {
     std.debug.print("> ", .{});
 
     while (try input.readUntilDelimiterOrEof(&line, '\n')) |x| {
-        std.debug.print("> ", .{});
-        std.debug.print("\nLine: {s} \nX: {s}\n", .{ line, x });
+        std.debug.print("\n> ", .{});
+        var scanner = try Scanner.init(allocator);
+        defer scanner.deinit();
+
+        const ts = try scanner.scanTokens(allocator, x);
+        defer ts.deinit();
+
+        for (ts.items) |item| {
+            std.debug.print("{any}\n", .{item});
+        }
     }
 }
 
