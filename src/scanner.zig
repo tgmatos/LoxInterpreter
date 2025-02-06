@@ -40,19 +40,18 @@ pub const Scanner = struct {
         self.keywords.deinit();
     }
 
-    pub fn scanTokens(self: *Self, allocator: std.mem.Allocator, source: []const u8) !std.ArrayList(Token) {
-        var tokens = std.ArrayList(Token).init(allocator);
+    pub fn scanTokens(self: *Self, source: []const u8) !std.ArrayList(Token) {
         while (self.current < source.len) {
             const token = scanToken(self, source);
             if (token) |t| {
-                try tokens.append(t);
+                try self.tokens.append(t);
             }
             self.current += 1;
         }
 
         const eof = Token{ .kind = .EOF, .lexeme = "", .line = self.line, .literal = null };
-        try tokens.append(eof);
-        return tokens;
+        try self.tokens.append(eof);
+        return self.tokens;
     }
 
     fn scanToken(self: *Self, source: []const u8) ?Token {
@@ -82,20 +81,42 @@ pub const Scanner = struct {
 
             // Two char tokens
             '!' => {
-                const token = if (self.match(source, '=')) TokenType.BANG_EQUAL else TokenType.BANG;
-                return self.makeTokenSingle(token, source);
+                if (self.match(source, '=')) {
+                    self.current += 1;
+                    return self.makeTokenSingle(TokenType.BANG_EQUAL, source);
+                } else {
+                    return self.makeTokenSingle(TokenType.BANG, source);
+                }
             },
+
+            //
             '=' => {
-                const token = if (self.match(source, '=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL;
-                return self.makeTokenSingle(token, source);
+                if (self.match(source, '=')) {
+                    self.current += 1;
+                    return self.makeTokenSingle(TokenType.EQUAL_EQUAL, source);
+                } else {
+                    return self.makeTokenSingle(TokenType.EQUAL, source);
+                }
             },
+
+            //
             '<' => {
-                const token = if (self.match(source, '=')) TokenType.LESS_EQUAL else TokenType.LESS;
-                return self.makeTokenSingle(token, source);
+                if (self.match(source, '=')) {
+                    self.current += 1;
+                    return self.makeTokenSingle(TokenType.LESS_EQUAL, source);
+                } else {
+                    return self.makeTokenSingle(TokenType.LESS, source);
+                }
             },
+
+            //
             '>' => {
-                const token = if (self.match(source, '=')) TokenType.GREATER_EQUAL else TokenType.GREATER;
-                return self.makeTokenSingle(token, source);
+                if (self.match(source, '=')) {
+                    self.current += 1;
+                    return self.makeTokenSingle(TokenType.GREATER_EQUAL, source);
+                } else {
+                    return self.makeTokenSingle(TokenType.GREATER, source);
+                }
             },
 
             // Slash and comments

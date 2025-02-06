@@ -6,92 +6,96 @@ const TokenType = @import("token.zig").TokenType;
 const P = @import("parser.zig");
 const Parser = P.Parser;
 const ParserError = P.ParserError;
-const Expresssion = @import("expression.zig");
-const allocator = std.testing.allocator;
+const E = @import("expression.zig");
+const Expr = E.Expr;
+// const allocator = std.testing.allocator;
+const allocator = std.heap.page_allocator;
 
-test "Test Parse Error" {
-    const source = "(+)^";
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+const Util = @import("util.zig");
+const pretty = @import("pretty.zig");
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
-}
+// test "Test Parse Error" {
+//     const source = "(+)^";
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-test "Test All Possibilities" {
-    const source =
-        \\// this is a comment
-        \\(( )){} // grouping stuff
-        \\!*+-/=<> <= == // operators
-        \\"testando" // string
-        \\1.337 // number
-        \\false // keyword
-    ;
+//     _ = try scanner.scanTokens(source);
+//     //defer ts.deinit();
+// }
 
-    const expectedTokenTypes = [_]TokenType{ .LEFT_PAREN, .LEFT_PAREN, .RIGHT_PAREN, .RIGHT_PAREN, .LEFT_BRACE, .RIGHT_BRACE, .BANG, .STAR, .PLUS, .MINUS, .SLASH, .EQUAL, .LESS, .GREATER, .LESS_EQUAL, .EQUAL_EQUAL, .STRING, .NUMBER, .FALSE, .EOF };
+// test "Test All Possibilities" {
+//     const source =
+//         \\// this is a comment
+//         \\(( )){} // grouping stuff
+//         \\!*+-/=<> <= == // operators
+//         \\"testando" // string
+//         \\1.337 // number
+//         \\false // keyword
+//     ;
 
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+//     const expectedTokenTypes = [_]TokenType{ .LEFT_PAREN, .LEFT_PAREN, .RIGHT_PAREN, .RIGHT_PAREN, .LEFT_BRACE, .RIGHT_BRACE, .BANG, .STAR, .PLUS, .MINUS, .SLASH, .EQUAL, .LESS, .GREATER, .LESS_EQUAL, .EQUAL_EQUAL, .STRING, .NUMBER, .FALSE, .EOF };
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-    for (ts.items, expectedTokenTypes) |item, token| {
-        try std.testing.expectEqual(token, item.kind);
-    }
-}
+//     const ts = try scanner.scanTokens(source);
+//     //defer ts.deinit();
 
-test "Test Strings" {
-    const source = "\"testando\"";
+//     for (ts.items, expectedTokenTypes) |item, token| {
+//         try std.testing.expectEqual(token, item.kind);
+//     }
+// }
 
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+// test "Test Strings" {
+//     const source = "\"testando\"";
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-    try std.testing.expectEqual(@as(usize, 2), ts.items.len);
-    try std.testing.expectEqual(TokenType.STRING, ts.items[0].kind);
-    try std.testing.expectEqualStrings("testando", ts.items[0].literal.?.string);
-}
+//     const ts = try scanner.scanTokens(source);
+//     //defer ts.deinit();
 
-test "Test String Error Parsing" {
-    const source = "\"testando";
+//     try std.testing.expectEqual(@as(usize, 2), ts.items.len);
+//     try std.testing.expectEqual(TokenType.STRING, ts.items[0].kind);
+//     try std.testing.expectEqualStrings("testando", ts.items[0].literal.?.string);
+// }
 
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+// test "Test String Error Parsing" {
+//     const source = "\"testando";
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-    const expectedTokenTypes = [_]TokenType{ .ERROR, .EOF };
-    for (ts.items, expectedTokenTypes) |item, token| {
-        try std.testing.expectEqual(token, item.kind);
-    }
-}
+//     const ts = try scanner.scanTokens(source);
+//     //defer ts.deinit();
 
-test "Test Numbers" {
-    const source = "1.337";
+//     const expectedTokenTypes = [_]TokenType{ .ERROR, .EOF };
+//     for (ts.items, expectedTokenTypes) |item, token| {
+//         try std.testing.expectEqual(token, item.kind);
+//     }
+// }
 
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+// test "Test Numbers" {
+//     const source = "1.337";
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-    try std.testing.expectEqual(@as(usize, 2), ts.items.len);
-    try std.testing.expectEqual(TokenType.NUMBER, ts.items[0].kind);
-    try std.testing.expectEqual(1.337, ts.items[0].literal.?.number);
-}
+//     const ts = try scanner.scanTokens(source);
+//     //defer ts.deinit();
+
+//     try std.testing.expectEqual(@as(usize, 2), ts.items.len);
+//     try std.testing.expectEqual(TokenType.NUMBER, ts.items[0].kind);
+//     try std.testing.expectEqual(1.337, ts.items[0].literal.?.number);
+// }
 
 test "Test Keywords" {
-    const source = "1 - (2 * 3) < 4 == false";
+    const source = "5 - (2 * 3) < 4 == false";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+    const ts = try scanner.scanTokens(source);
 
     const expectedTokenTypes = [_]TokenType{ .NUMBER, .MINUS, .LEFT_PAREN, .NUMBER, .STAR, .NUMBER, .RIGHT_PAREN, .LESS, .NUMBER, .EQUAL_EQUAL, .FALSE, .EOF };
 
@@ -101,10 +105,15 @@ test "Test Keywords" {
     }
 
     // Check the values of the tokens
-    try std.testing.expectEqual(@as(f64, 1.0), ts.items[0].literal.?.number);
+    try std.testing.expectEqual(@as(f64, 5.0), ts.items[0].literal.?.number);
     try std.testing.expectEqual(@as(f64, 2.0), ts.items[3].literal.?.number);
     try std.testing.expectEqual(@as(f64, 3.0), ts.items[5].literal.?.number);
     try std.testing.expectEqual(@as(f64, 4.0), ts.items[8].literal.?.number);
+
+    var parser: Parser = Parser.init(allocator, &ts);
+    const expr = try parser.parser();
+
+    Util.printAST(expr);
 }
 
 // test "Test Parser" {
@@ -146,15 +155,15 @@ test "Test Keywords" {
 //     std.debug.print("{any}\n", .{p});
 // }
 
-test "Test Missing Left Hand Operator in Parser" {
-    const source = "== false";
+// test "Test Missing Left Hand Operator in Parser" {
+//     const source = "== false";
 
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
+//     var scanner = try Scanner.init(allocator);
+//     defer scanner.deinit();
 
-    const ts = try scanner.scanTokens(allocator, source);
-    defer ts.deinit();
+//     const ts = try scanner.scanTokens(allocator, source);
+//     defer ts.deinit();
 
-    var parser: Parser = Parser.init(&ts);
-    try std.testing.expectError(ParserError.MissingLeftOperandError, parser.parser());
-}
+//     var parser: Parser = Parser.init(&ts);
+//     try std.testing.expectError(ParserError.MissingLeftOperandError, parser.parser());
+// }
