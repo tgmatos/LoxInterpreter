@@ -2,30 +2,10 @@ const std = @import("std");
 const token = @import("token.zig");
 const Scanner = @import("scanner.zig").Scanner;
 const Parser = @import("parser.zig").Parser;
+const Util = @import("util.zig");
 
 pub fn main() !void {
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // defer _ = gpa.deinit();
-
-    // const allocator = gpa.allocator();
-
-    // const source = "()";
-    // var scanner = try Scanner.init(allocator);
-    // defer scanner.deinit();
-
-    // const ts = try scanner.scanTokens(allocator, source);
-    // defer ts.deinit();
-    // for (ts.items) |item| {
-    //     std.debug.print("{any}\n", .{item});
-    // }
-
     try runPrompt();
-    // if (std.os.argv.len > 1) {
-    //     std.debug.print("Usage: lox [script]\n", .{});
-    //     std.os.linux.exit(64);
-    // } else if (std.os.argv.len == 1) {
-    //     runFile(std.os.argv[0]);
-    // }
 }
 
 fn runFile(path: []u8) !void {
@@ -48,16 +28,38 @@ fn runPrompt() !void {
     std.debug.print("> ", .{});
 
     while (try input.readUntilDelimiterOrEof(&line, '\n')) |x| {
-        std.debug.print("\n> ", .{});
         var scanner = try Scanner.init(allocator);
         defer scanner.deinit();
 
-        const ts = try scanner.scanTokens(allocator, x);
-        defer ts.deinit();
+        const ts = try scanner.scanTokens(x);
 
-        for (ts.items) |item| {
-            std.debug.print("{any}\n", .{item});
+        var parser: Parser = Parser.init(allocator, &ts);
+        const expr = try parser.parser();
+        defer expr.deinit(allocator);
+
+        // Util.printAST(expr);
+
+        const a = expr.evaluate(allocator) catch |err| {
+            std.log.err("{any}", .{err});
+            std.debug.print("> ", .{});
+            continue;
+        };
+        defer a.deinit(allocator);
+
+        switch (a.*) {
+            .binary => std.debug.print("{any}\n", .{a.binary.*}),
+            .grouping => std.debug.print("{any}\n", .{a.grouping.*}),
+            .unary => std.debug.print("{any}\n", .{a.unary.*}),
+            .literal => {
+                switch (a.literal.*) {
+                    .number => std.debug.print("{d}\n", .{a.literal.number}),
+                    .string => std.debug.print("{s}\n", .{a.literal.string}),
+                    .boolean => std.debug.print("{any}\n", .{a.literal.boolean}),
+                    .nil => std.debug.print("nil\n", .{}),
+                }
+            },
         }
+        std.debug.print("> ", .{});
     }
 }
 

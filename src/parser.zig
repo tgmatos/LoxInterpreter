@@ -56,9 +56,11 @@ pub const Parser = struct {
 
         var expr: *Expr = try self.comparison();
         const matches = [_]TokenType{ .BANG_EQUAL, .EQUAL_EQUAL };
+        // std.debug.print("Expr: {any}\nCurrent Token: {any}\n", .{ expr, self.tokens.items[self.current] });
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+            // std.debug.print(">{any}\n", .{operator});
             const right = try self.comparison();
             expr = try Binary.create(self.allocator, expr, operator, right);
         }
@@ -108,7 +110,7 @@ pub const Parser = struct {
         while (self.match(&matches)) {
             const operator: Token = self.previous();
             const right: *Expr = try self.unary();
-            expr = try Binary.create(self.allocator, expr, operator, right); //Unary.create(self.allocator, operator, right);
+            expr = try Binary.create(self.allocator, expr, operator, right);
         }
         return expr;
     }
@@ -137,16 +139,25 @@ pub const Parser = struct {
         }
 
         switch (self.peek().kind) {
-            .FALSE => return try Literal.create(self.allocator, Literal{ .boolean = false }),
-            .TRUE => return try Literal.create(self.allocator, Literal{ .boolean = true }),
-            .NIL => return try Literal.create(self.allocator, Literal{ .nil = void{} }),
+            .FALSE => {
+                _ = self.advance();
+                return try Literal.create(self.allocator, Literal{ .boolean = false });
+            },
+            .TRUE => {
+                _ = self.advance();
+                return try Literal.create(self.allocator, Literal{ .boolean = true });
+            },
+            .NIL => {
+                _ = self.advance();
+                return try Literal.create(self.allocator, Literal{ .nil = void{} });
+            },
             .NUMBER => {
                 _ = self.advance();
-                return try Literal.create(self.allocator, Literal{ .number = self.previous().literal.? });
+                return try Literal.create(self.allocator, Literal{ .number = self.previous().literal.?.number });
             },
             .STRING => {
                 _ = self.advance();
-                return try Literal.create(self.allocator, Literal{ .string = self.previous().literal.? });
+                return try Literal.create(self.allocator, Literal{ .string = self.previous().literal.?.string });
             },
 
             // Handle the parens
@@ -157,10 +168,9 @@ pub const Parser = struct {
                 // Check if the right paren is present
                 switch (self.check(.RIGHT_PAREN)) {
                     true => _ = self.advance(),
-                    false => std.debug.panic("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek().lexeme }),
+                    false => std.debug.panic("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek() }),
                     //std.log.err("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek().lexeme });
                     // return ParserError.RightParenNotPresent;
-
                 }
 
                 return try Grouping.create(self.allocator, expr);
@@ -193,7 +203,8 @@ pub const Parser = struct {
     }
 
     fn validate_left_operand(self: *Self) bool {
-        const matches = [_]TokenType{ .EQUAL_EQUAL, .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .PLUS, .MINUS, .STAR, .COMMA };
+        // MINUS is removed from the matches because it doesn't need to have a left hand operator. It can be used with a number like -5, and clearly it doesn't have a left hand operator.
+        const matches = [_]TokenType{ .EQUAL_EQUAL, .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .PLUS, .STAR, .COMMA };
 
         return self.match(&matches);
     }

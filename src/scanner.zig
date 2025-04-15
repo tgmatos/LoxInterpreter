@@ -36,8 +36,9 @@ pub const Scanner = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.tokens.deinit();
         self.keywords.deinit();
+        self.tokens.deinit();
+        // self.tokens.clearAndFree();
     }
 
     pub fn scanTokens(self: *Self, source: []const u8) !std.ArrayList(Token) {
@@ -68,24 +69,24 @@ pub const Scanner = struct {
         const c: u8 = source[self.current];
         return switch (c) {
             // One char tokens
-            '(' => self.makeTokenSingle(.LEFT_PAREN, source),
-            ')' => self.makeTokenSingle(.RIGHT_PAREN, source),
-            '{' => self.makeTokenSingle(.LEFT_BRACE, source),
-            '}' => self.makeTokenSingle(.RIGHT_BRACE, source),
-            ',' => self.makeTokenSingle(.COMMA, source),
-            '.' => self.makeTokenSingle(.DOT, source),
-            '-' => self.makeTokenSingle(.MINUS, source),
-            '+' => self.makeTokenSingle(.PLUS, source),
-            ';' => self.makeTokenSingle(.SEMICOLON, source),
-            '*' => self.makeTokenSingle(.STAR, source),
+            '(' => self.makeTokenSingle(.LEFT_PAREN, "("),
+            ')' => self.makeTokenSingle(.RIGHT_PAREN, ")"),
+            '{' => self.makeTokenSingle(.LEFT_BRACE, "{"),
+            '}' => self.makeTokenSingle(.RIGHT_BRACE, "}"),
+            ',' => self.makeTokenSingle(.COMMA, ","),
+            '.' => self.makeTokenSingle(.DOT, "."),
+            '-' => self.makeTokenSingle(.MINUS, "-"),
+            '+' => self.makeTokenSingle(.PLUS, "+"),
+            ';' => self.makeTokenSingle(.SEMICOLON, ";"),
+            '*' => self.makeTokenSingle(.STAR, "*"),
 
             // Two char tokens
             '!' => {
                 if (self.match(source, '=')) {
                     self.current += 1;
-                    return self.makeTokenSingle(TokenType.BANG_EQUAL, source);
+                    return self.makeTokenSingle(TokenType.BANG_EQUAL, "!=");
                 } else {
-                    return self.makeTokenSingle(TokenType.BANG, source);
+                    return self.makeTokenSingle(TokenType.BANG, "!");
                 }
             },
 
@@ -93,9 +94,9 @@ pub const Scanner = struct {
             '=' => {
                 if (self.match(source, '=')) {
                     self.current += 1;
-                    return self.makeTokenSingle(TokenType.EQUAL_EQUAL, source);
+                    return self.makeTokenSingle(TokenType.EQUAL_EQUAL, "==");
                 } else {
-                    return self.makeTokenSingle(TokenType.EQUAL, source);
+                    return self.makeTokenSingle(TokenType.EQUAL, "=");
                 }
             },
 
@@ -103,24 +104,23 @@ pub const Scanner = struct {
             '<' => {
                 if (self.match(source, '=')) {
                     self.current += 1;
-                    return self.makeTokenSingle(TokenType.LESS_EQUAL, source);
+                    return self.makeTokenSingle(TokenType.LESS_EQUAL, "<=");
                 } else {
-                    return self.makeTokenSingle(TokenType.LESS, source);
+                    return self.makeTokenSingle(TokenType.LESS, "<");
                 }
             },
 
             //
             '>' => {
                 if (self.match(source, '=')) {
-                    self.current += 1;
-                    return self.makeTokenSingle(TokenType.GREATER_EQUAL, source);
+                    return self.makeTokenSingle(TokenType.GREATER_EQUAL, ">=");
                 } else {
-                    return self.makeTokenSingle(TokenType.GREATER, source);
+                    return self.makeTokenSingle(TokenType.GREATER, ">");
                 }
             },
 
             // Slash and comments
-            '/' => return self.makeTokenSingle(.SLASH, source),
+            '/' => return self.makeTokenSingle(.SLASH, "/"),
 
             // Strings
             '"' => self.parseString(source),
@@ -177,7 +177,7 @@ pub const Scanner = struct {
     }
 
     fn makeTokenSingle(self: *Self, kind: T.TokenType, source: []const u8) Token {
-        return Token{ .kind = kind, .lexeme = source[self.start..self.current], .line = self.line, .literal = null };
+        return Token{ .kind = kind, .lexeme = source, .line = self.line, .literal = null };
     }
 
     fn makeToken(self: *Self, kind: T.TokenType, value: Literal) Token {
@@ -248,6 +248,8 @@ pub const Scanner = struct {
         }
 
         const str = source[self.start..self.current];
+        // CHANGE THIS SHIT
+        self.current -= 1;
         const ttype = self.keywords.get(str); // handle null
         if (ttype) |tokentype| {
             return self.makeKeywordToken(tokentype);
