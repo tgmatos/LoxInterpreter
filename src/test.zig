@@ -130,7 +130,7 @@ test "Check Binary Evaluation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.number == 6);
 }
 
@@ -145,7 +145,7 @@ test "Check Concatenation Evaluation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(std.mem.eql(u8, a.literal.string, "testando isso"));
 }
 
@@ -160,7 +160,7 @@ test "Check truthy" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.boolean == false);
 }
 
@@ -175,7 +175,7 @@ test "Check Unary Negation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.number == -5);
 }
 
@@ -190,7 +190,7 @@ test "Check Grouping Evaluation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.number == 10);
 }
 
@@ -205,7 +205,7 @@ test "Check Binary Subtraction" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.number == 6);
 }
 
@@ -220,7 +220,7 @@ test "Check Binary Multiplication" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.number == 12);
 }
 
@@ -235,7 +235,7 @@ test "Check true == false" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = expr.evaluate(allocator);
+    const a = try expr.evaluate(allocator);
     std.debug.assert(a.literal.boolean == true);
 }
 

@@ -56,11 +56,9 @@ pub const Parser = struct {
 
         var expr: *Expr = try self.comparison();
         const matches = [_]TokenType{ .BANG_EQUAL, .EQUAL_EQUAL };
-        // std.debug.print("Expr: {any}\nCurrent Token: {any}\n", .{ expr, self.tokens.items[self.current] });
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
-            // std.debug.print(">{any}\n", .{operator});
             const right = try self.comparison();
             expr = try Binary.create(self.allocator, expr, operator, right);
         }

@@ -24,7 +24,7 @@ fn runPrompt() !void {
     const stdin = std.io.getStdIn();
     var buf_reader = std.io.bufferedReader(stdin.reader());
     var input = buf_reader.reader();
-    var line: [2048]u8 = undefined;
+    var line: [1024 * 1024]u8 = undefined;
     std.debug.print("> ", .{});
 
     while (try input.readUntilDelimiterOrEof(&line, '\n')) |x| {
@@ -36,8 +36,6 @@ fn runPrompt() !void {
         var parser: Parser = Parser.init(allocator, &ts);
         const expr = try parser.parser();
         defer expr.deinit(allocator);
-
-        // Util.printAST(expr);
 
         const a = expr.evaluate(allocator) catch |err| {
             std.log.err("{any}", .{err});

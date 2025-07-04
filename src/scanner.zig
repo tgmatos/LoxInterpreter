@@ -7,38 +7,36 @@ const Literal = T.Literal;
 pub const Scanner = struct {
     const Self = @This();
     tokens: std.ArrayList(Token),
-    keywords: std.StringHashMap(TokenType),
+    keywords: std.StaticStringMap(TokenType),
     start: u32,
     current: u32,
     line: u32,
 
     // Todo: Change the hashmap to a comptime hash map.
     pub fn init(allocator: std.mem.Allocator) !Scanner {
-        var hashmap = std.StringHashMap(TokenType).init(allocator);
-        try hashmap.put("and", TokenType.AND);
-        try hashmap.put("class", TokenType.CLASS);
-        try hashmap.put("else", TokenType.ELSE);
-        try hashmap.put("false", TokenType.FALSE);
-        try hashmap.put("for", TokenType.FOR);
-        try hashmap.put("fun", TokenType.FUN);
-        try hashmap.put("if", TokenType.IF);
-        try hashmap.put("nil", TokenType.NIL);
-        try hashmap.put("or", TokenType.OR);
-        try hashmap.put("print", TokenType.PRINT);
-        try hashmap.put("return", TokenType.RETURN);
-        try hashmap.put("super", TokenType.SUPER);
-        try hashmap.put("this", TokenType.THIS);
-        try hashmap.put("true", TokenType.TRUE);
-        try hashmap.put("var", TokenType.VAR);
-        try hashmap.put("while", TokenType.WHILE);
-
+        const hashmap = std.StaticStringMap(TokenType).initComptime(.{
+            .{ "and", TokenType.AND },
+            .{ "class", TokenType.CLASS },
+            .{ "else", TokenType.ELSE },
+            .{ "false", TokenType.FALSE },
+            .{ "for", TokenType.FOR },
+            .{ "fun", TokenType.FUN },
+            .{ "if", TokenType.IF },
+            .{ "nil", TokenType.NIL },
+            .{ "or", TokenType.OR },
+            .{ "print", TokenType.PRINT },
+            .{ "return", TokenType.RETURN },
+            .{ "super", TokenType.SUPER },
+            .{ "this", TokenType.THIS },
+            .{ "true", TokenType.TRUE },
+            .{ "var", TokenType.VAR },
+            .{ "while", TokenType.WHILE },
+        });
         return .{ .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap };
     }
 
     pub fn deinit(self: *Self) void {
-        self.keywords.deinit();
         self.tokens.deinit();
-        // self.tokens.clearAndFree();
     }
 
     pub fn scanTokens(self: *Self, source: []const u8) !std.ArrayList(Token) {

@@ -7,7 +7,7 @@ const activeTag = std.meta.activeTag;
 const print = std.debug.print;
 
 const OutOfMemory = std.mem.Allocator.Error.OutOfMemory;
-const RuntimeError = error{ OpNaN, OutOfMemory };
+const RuntimeError = error{ InvalidOperand, InvalidExpr, OutOfMemory };
 
 pub const Expr = union(enum) {
     const Self = @This();
@@ -101,7 +101,6 @@ pub const Unary = struct {
 
     pub fn evaluate(unary: Unary, allocator: std.mem.Allocator) RuntimeError!*Expr {
         const right = try unary.right.evaluate(allocator);
-        // errdefer right.deinit(allocator);
 
         const expr = try allocator.create(Expr);
         errdefer allocator.destroy(expr);
@@ -111,8 +110,8 @@ pub const Unary = struct {
 
         return switch (unary.operator.kind) {
             .MINUS => {
-                if ((activeTag(right.*) != Expr.literal) or (activeTag(right.literal.*) != Literal.number)) {
-                    return RuntimeError.OpNaN;
+                if (!checkOperand(right.*, Literal.number)) {
+                    return RuntimeError.InvalidOperand;
                 }
 
                 literal.* = .{ .number = -right.literal.number };
@@ -134,20 +133,24 @@ pub const Unary = struct {
                         return expr;
                     },
                     else => {
-                        literal.* = Literal{ .nil = void{} };
-                        expr.* = .{ .literal = literal };
-                        return expr;
+                        return RuntimeError.InvalidOperand;
                     },
                 }
             },
 
             // TODO
             else => {
-                literal.* = Literal{ .nil = void{} };
-                expr.* = .{ .literal = literal };
-                return expr;
+                return RuntimeError.InvalidExpr;
             },
         };
+    }
+
+    fn checkOperand(expr: Expr, t: anytype) bool {
+        if ((activeTag(expr) != Expr.literal) or (activeTag(expr.literal.*) != t)) {
+            return false;
+        }
+
+        return true;
     }
 };
 
@@ -179,6 +182,10 @@ pub const Binary = struct {
 
         return switch (binary.operator.kind) {
             .MINUS => {
+                if (!checkOperand(left.*, right.*)) {
+                    return RuntimeError.InvalidOperand;
+                }
+
                 literal.* = Literal{ .number = left.literal.number - right.literal.number };
                 expr.* = .{ .literal = literal };
                 return expr;
@@ -291,6 +298,14 @@ pub const Binary = struct {
         }
 
         return false;
+    }
+
+    fn checkOperand(left: Expr, right: Expr) bool {
+        if (activeTag(left) != Expr.literal) return false;
+        if (activeTag(right) != Expr.literal) return false;
+        if (activeTag(left.literal.*) != Literal.number) return false;
+        if (activeTag(right.literal.*) != Literal.number) return false;
+        return true;
     }
 };
 
