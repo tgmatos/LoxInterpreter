@@ -1,6 +1,10 @@
 const std = @import("std");
 const T = @import("token.zig");
 const E = @import("expression.zig");
+const S = @import("statement.zig");
+
+const ArrayList = std.ArrayList;
+
 const OutOfMemory = std.mem.Allocator.Error.OutOfMemory;
 
 const Token = T.Token;
@@ -12,7 +16,10 @@ const Literal = E.Literal;
 const LiteralType = E.LiteralType;
 const Grouping = E.Grouping;
 
-pub const ParserError = error{ RightParenNotPresent, TokenInvalid, MissingLeftOperandError, OutOfMemory };
+const Statement = S.Statement;
+const Print = S.Print;
+
+pub const ParserError = error{ RightParenNotPresent, TokenInvalid, MissingLeftOperandError, OutOfMemory, MissingSemicolon };
 
 pub const Parser = struct {
     const Self = @This();
@@ -24,8 +31,47 @@ pub const Parser = struct {
         return .{ .allocator = allocator, .current = 0, .tokens = tokens };
     }
 
-    pub fn parser(self: *Self) ParserError!*Expr {
-        return try self.expression();
+    pub fn parser(self: *Self) !ArrayList(*Statement) {
+        var statementList = ArrayList(*Statement).init(self.allocator);
+        while (!self.isAtEnd()) {
+            const stmt: *Statement = try self.statement();
+            try statementList.append(stmt);
+        }
+        return statementList;
+    }
+
+    fn statement(self: *Self) ParserError!*Statement {
+        if (self.match_one(.PRINT)) {
+            return self.printStatement();
+        }
+        const stmt = self.expressionStatement();
+        return stmt;
+    }
+
+    fn printStatement(self: *Self) ParserError!*Statement {
+        const expr: *Expr = try self.expression();
+        errdefer expr.deinit(self.allocator);
+
+        if (!self.check(.SEMICOLON)) {
+            return ParserError.MissingSemicolon;
+        }
+
+        _ = self.advance();
+        const stmt: *Statement = try Print.create(self.allocator, expr);
+        return stmt;
+    }
+
+    fn expressionStatement(self: *Self) ParserError!*Statement {
+        const expr: *Expr = try self.expression();
+        errdefer expr.deinit(self.allocator);
+
+        if (!self.check(.SEMICOLON)) {
+            return ParserError.MissingSemicolon;
+        }
+        _ = self.advance();
+        const stmt: *Statement = try self.allocator.create(Statement);
+        stmt.* = .{ .expression = expr };
+        return stmt;
     }
 
     fn expression(self: *Self) ParserError!*Expr {
@@ -55,6 +101,7 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.comparison();
+
         const matches = [_]TokenType{ .BANG_EQUAL, .EQUAL_EQUAL };
 
         while (self.match(&matches)) {
@@ -71,6 +118,7 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.term();
+
         const matches = [_]TokenType{ .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL };
 
         while (self.match(&matches)) {
@@ -87,12 +135,14 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.factor();
+
         const matches = [_]TokenType{ .PLUS, .MINUS };
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
             const right: *Expr = try self.factor();
             expr = try Binary.create(self.allocator, expr, operator, right);
+            errdefer expr.deinit(self.allocator);
         }
         return expr;
     }
@@ -103,6 +153,7 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.unary();
+        errdefer expr.deinit(self.allocator);
         const matches = [_]TokenType{ .SLASH, .STAR };
 
         while (self.match(&matches)) {
@@ -125,6 +176,7 @@ pub const Parser = struct {
             const right: *Expr = try self.unary();
 
             const expr = try Unary.create(self.allocator, operator, right);
+
             return expr;
         }
 
@@ -167,13 +219,11 @@ pub const Parser = struct {
                 switch (self.check(.RIGHT_PAREN)) {
                     true => _ = self.advance(),
                     false => std.debug.panic("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek() }),
-                    //std.log.err("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek().lexeme });
-                    // return ParserError.RightParenNotPresent;
                 }
 
                 return try Grouping.create(self.allocator, expr);
             },
-            else => std.debug.panic("Error: {any}\n", .{ParserError.TokenInvalid}),
+            else => |invalidToken| std.debug.panic("Error: {any} - Current Token: {any}\n", .{ ParserError.TokenInvalid, invalidToken }),
         }
     }
 
@@ -202,7 +252,17 @@ pub const Parser = struct {
 
     fn validate_left_operand(self: *Self) bool {
         // MINUS is removed from the matches because it doesn't need to have a left hand operator. It can be used with a number like -5, and clearly it doesn't have a left hand operator.
-        const matches = [_]TokenType{ .EQUAL_EQUAL, .BANG_EQUAL, .LESS, .LESS_EQUAL, .GREATER, .GREATER_EQUAL, .PLUS, .STAR, .COMMA };
+        const matches = [_]TokenType{
+            .EQUAL_EQUAL,
+            .BANG_EQUAL,
+            .LESS,
+            .LESS_EQUAL,
+            .GREATER,
+            .GREATER_EQUAL,
+            .PLUS,
+            .STAR,
+            .COMMA,
+        };
 
         return self.match(&matches);
     }

@@ -4,6 +4,13 @@ const Scanner = @import("scanner.zig").Scanner;
 const Parser = @import("parser.zig").Parser;
 const Util = @import("util.zig");
 
+const E = @import("expression.zig");
+const Expr = E.Expr;
+const Binary = E.Binary;
+const Unary = E.Unary;
+const Grouping = E.Grouping;
+const Literal = E.Literal;
+
 pub fn main() !void {
     try runPrompt();
 }
@@ -29,33 +36,47 @@ fn runPrompt() !void {
 
     while (try input.readUntilDelimiterOrEof(&line, '\n')) |x| {
         var scanner = try Scanner.init(allocator);
+        const ts = try scanner.scanTokens(x);
         defer scanner.deinit();
 
-        const ts = try scanner.scanTokens(x);
-
         var parser: Parser = Parser.init(allocator, &ts);
-        const expr = try parser.parser();
-        defer expr.deinit(allocator);
-
-        const a = expr.evaluate(allocator) catch |err| {
+        const statementList = parser.parser() catch |err| {
             std.log.err("{any}", .{err});
             std.debug.print("> ", .{});
             continue;
         };
-        defer a.deinit(allocator);
+        defer statementList.deinit();
 
-        switch (a.*) {
-            .binary => std.debug.print("{any}\n", .{a.binary.*}),
-            .grouping => std.debug.print("{any}\n", .{a.grouping.*}),
-            .unary => std.debug.print("{any}\n", .{a.unary.*}),
-            .literal => {
-                switch (a.literal.*) {
-                    .number => std.debug.print("{d}\n", .{a.literal.number}),
-                    .string => std.debug.print("{s}\n", .{a.literal.string}),
-                    .boolean => std.debug.print("{any}\n", .{a.literal.boolean}),
-                    .nil => std.debug.print("nil\n", .{}),
-                }
-            },
+        for (statementList.items) |stmt| {
+            defer stmt.deinit(allocator);
+
+            if (stmt.* == .print) {
+                stmt.evaluate(allocator) catch |err| {
+                    std.log.err("{any}\n", .{err});
+                };
+                continue;
+            }
+
+            stmt.evaluate(allocator) catch |err| {
+                std.log.err("{any}", .{err});
+                std.debug.print("> ", .{});
+                continue;
+            };
+
+            const a = stmt.expression;
+            switch (a.*) {
+                .binary => std.debug.print("{any}\n", .{a.binary.*}),
+                .grouping => std.debug.print("{any}\n", .{a.grouping.*}),
+                .unary => std.debug.print("{any}\n", .{a.unary.*}),
+                .literal => {
+                    switch (a.literal.*) {
+                        .number => std.debug.print("{d}\n", .{a.literal.number}),
+                        .string => std.debug.print("\"{s}\"\n", .{a.literal.string}),
+                        .boolean => std.debug.print("{any}\n", .{a.literal.boolean}),
+                        .nil => std.debug.print("nil\n", .{}),
+                    }
+                },
+            }
         }
         std.debug.print("> ", .{});
     }
