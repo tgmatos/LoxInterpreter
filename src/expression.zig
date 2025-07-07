@@ -242,14 +242,113 @@ pub const Binary = struct {
                     return expr;
                 }
 
-                if (leftTag == Literal.string and rightTag == Literal.string) {
-                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, right.literal.string }) catch |err| {
-                        std.log.err("Error on concatenation string. {any}", .{err});
-                        @panic("Aborting");
-                    };
-                    literal.* = Literal{ .string = str };
-                    expr.* = .{ .literal = literal };
-                    return expr;
+                if (leftTag == Literal.string) {
+                    switch (rightTag) {
+                        .string => {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, right.literal.string }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                        .number => {
+                            var buf: [128]u8 = undefined;
+                            const result = std.fmt.formatFloat(&buf, right.literal.number, .{ .mode = .decimal }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, result }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                        .boolean => {
+                            switch (right.literal.boolean) {
+                                true => {
+                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "true" });
+                                    literal.* = Literal{ .string = str };
+                                    expr.* = .{ .literal = literal };
+                                    return expr;
+                                },
+                                false => {
+                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "false" });
+                                    literal.* = Literal{ .string = str };
+                                    expr.* = .{ .literal = literal };
+                                    return expr;
+                                },
+                            }
+                        },
+                        .nil => {
+                            const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "nil" });
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                    }
+                }
+
+                if (rightTag == Literal.string) {
+                    switch (leftTag) {
+                        .string => {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, right.literal.string }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                        .number => {
+                            var buf: [128]u8 = undefined;
+                            const result = std.fmt.formatFloat(&buf, left.literal.number, .{ .mode = .decimal }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ result, right.literal.string }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                        .boolean => {
+                            switch (left.literal.boolean) {
+                                true => {
+                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "true", right.literal.string }) catch |err| {
+                                        std.log.err("Error on concatenation string. {any}", .{err});
+                                        @panic("Aborting");
+                                    };
+                                    literal.* = Literal{ .string = str };
+                                    expr.* = .{ .literal = literal };
+                                    return expr;
+                                },
+                                false => {
+                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "false", right.literal.string }) catch |err| {
+                                        std.log.err("Error on concatenation string. {any}", .{err});
+                                        @panic("Aborting");
+                                    };
+                                    literal.* = Literal{ .string = str };
+                                    expr.* = .{ .literal = literal };
+                                    return expr;
+                                },
+                            }
+                        },
+                        .nil => {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ "nil", right.literal.string }) catch |err| {
+                                std.log.err("Error on concatenation string. {any}", .{err});
+                                @panic("Aborting");
+                            };
+                            literal.* = Literal{ .string = str };
+                            expr.* = .{ .literal = literal };
+                            return expr;
+                        },
+                    }
                 }
 
                 // TODO: Return an error
@@ -309,6 +408,12 @@ pub const Binary = struct {
     }
 };
 
+// program        → statement* EOF ;
+// statement      → exprStmt
+//                | printStmt ;
+
+// exprStmt       → expression ";" ;
+// printStmt      → "print" expression ";" ;
 // expression     → literal
 //                | unary
 //                | binary
