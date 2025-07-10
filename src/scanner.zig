@@ -11,6 +11,7 @@ pub const Scanner = struct {
     start: u32,
     current: u32,
     line: u32,
+    allocator: std.mem.Allocator,
 
     // Todo: Change the hashmap to a comptime hash map.
     pub fn init(allocator: std.mem.Allocator) !Scanner {
@@ -32,7 +33,7 @@ pub const Scanner = struct {
             .{ "var", TokenType.VAR },
             .{ "while", TokenType.WHILE },
         });
-        return .{ .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap };
+        return .{ .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap, .allocator = allocator };
     }
 
     pub fn deinit(self: *Self) void {
@@ -213,7 +214,12 @@ pub const Scanner = struct {
 
         self.current += 1;
         const str = source[self.start + 1 .. self.current];
-        const value = Literal{ .string = str };
+        const allocated_str = self.allocator.alloc(u8, str.len) catch |err| {
+            std.log.err("Error: {any}", .{err});
+            @panic("Aborted!");
+        };
+        @memcpy(allocated_str, str);
+        const value = Literal{ .string = allocated_str };
         return self.makeToken(TokenType.STRING, value);
     }
 

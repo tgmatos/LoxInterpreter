@@ -48,7 +48,7 @@ pub const TokenType = enum {
     ERROR,
 };
 
-pub const Literal = union(enum) { string: []const u8, number: f64 };
+pub const Literal = union(enum) { string: []u8, number: f64 };
 
 // Consider using an Struct of Arrays with MultiArrayList
 pub const Token = struct {

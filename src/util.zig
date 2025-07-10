@@ -18,34 +18,6 @@ const Grouping = E.Grouping;
 
 const allocator = std.testing.allocator;
 
-// pub fn printAST(expr: *Expr) void {
-//     switch (expr.*) {
-//         .binary => |value| {
-//             printAST(value.exprLeft);
-//             std.debug.print("{any}\n", .{value.operator});
-//             printAST(value.exprRight);
-//         },
-//         .literal => |value| {
-//             switch (value.*) {
-//                 .number => |literal| std.debug.print("{any}\n", .{literal}),
-//                 .string => |literal| std.debug.print("{any}\n", .{literal}),
-//                 .boolean => |literal| std.debug.print("{any}\n", .{literal}),
-//                 .nil => std.debug.print("null\n", .{}),
-//             }
-//             std.debug.print("{any}\n", .{value});
-//         },
-//         .unary => |value| {
-//             std.debug.print("{any}\n", .{value.operator});
-//             printAST(value.right);
-//         },
-//         .grouping => |value| {
-//             //std.debug.print("{any}\n", .{expr.grouping});
-//             printAST(value.expr);
-//         },
-//         //else => std.debug.print("Error\n"),
-//     }
-// }
-
 pub fn printAST(expr: *Expr) void {
     switch (expr.*) {
         .literal => |value| printLiteral(value),
@@ -56,7 +28,7 @@ pub fn printAST(expr: *Expr) void {
 }
 
 fn printLiteral(literal: *Literal) void {
-    std.debug.print("{any}\n", .{literal});
+    std.debug.print("{any}\n", .{literal.*});
 }
 
 fn printUnary(unary: *Unary) void {
@@ -71,7 +43,6 @@ fn printBinary(binary: *Binary) void {
 }
 
 fn printGrouping(grouping: *Grouping) void {
-    //std.debug.print("==>{any}\n", .{grouping});
+    std.debug.print("\n\nGrouping: {any}\n\n", .{grouping.expr.*});
     printAST(grouping.expr);
-    // std.debug.print("==>{any}\n", .{grouping.expr});
 }

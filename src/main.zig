@@ -24,7 +24,8 @@ fn run(source: []u8) void {
 }
 
 fn runPrompt() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
@@ -51,29 +52,30 @@ fn runPrompt() !void {
             defer stmt.deinit(allocator);
 
             if (stmt.* == .print) {
-                stmt.evaluate(allocator) catch |err| {
+                _ = stmt.evaluate(allocator) catch |err| {
                     std.log.err("{any}\n", .{err});
                 };
                 continue;
             }
 
-            stmt.evaluate(allocator) catch |err| {
+            const b = stmt.evaluate(allocator) catch |err| {
                 std.log.err("{any}", .{err});
                 std.debug.print("> ", .{});
                 continue;
             };
 
-            const a = stmt.expression;
+            const a = b.?;
+            defer a.deinit(allocator);
             switch (a.*) {
-                .binary => std.debug.print("{any}\n", .{a.binary.*}),
-                .grouping => std.debug.print("{any}\n", .{a.grouping.*}),
-                .unary => std.debug.print("{any}\n", .{a.unary.*}),
+                .binary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.binary.*}),
+                .grouping => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.grouping.*}),
+                .unary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.unary.*}),
                 .literal => {
                     switch (a.literal.*) {
-                        .number => std.debug.print("{d}\n", .{a.literal.number}),
-                        .string => std.debug.print("\"{s}\"\n", .{a.literal.string}),
-                        .boolean => std.debug.print("{any}\n", .{a.literal.boolean}),
-                        .nil => std.debug.print("nil\n", .{}),
+                        .number => std.debug.print("\x1b[32m{d}\x1b[0m\n", .{a.literal.number}),
+                        .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{a.literal.string}),
+                        .boolean => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.literal.boolean}),
+                        .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
                     }
                 },
             }

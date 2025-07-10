@@ -1,5 +1,6 @@
 const std = @import("std");
 const E = @import("expression.zig");
+const Util = @import("util.zig");
 const Expression = E.Expr;
 
 pub const Statement = union(enum) {
@@ -7,19 +8,14 @@ pub const Statement = union(enum) {
     expression: *Expression,
     print: *Print,
 
-    pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !void {
+    pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !?*Expression {
         switch (self.*) {
             .expression => {
-                const lastExpr = self.expression;
-                defer lastExpr.deinit(allocator);
-
-                const expr = try self.expression.evaluate(allocator);
-                self.expression = expr;
-                return;
+                return try self.expression.evaluate(allocator);
             },
             .print => {
                 try self.print.evaluate(allocator);
-                return;
+                return null;
             },
         }
     }
