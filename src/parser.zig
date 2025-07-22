@@ -20,6 +20,8 @@ const Statement = S.Statement;
 const Print = S.Print;
 const VarDeclaration = S.VarDeclaration;
 
+const Util = @import("util.zig");
+
 // const D = @import("declaration.zig");
 // const Declaration = D.Declaration;
 
@@ -37,6 +39,13 @@ pub const Parser = struct {
 
     pub fn parser(self: *Self) !ArrayList(*Statement) {
         var statementList = ArrayList(*Statement).init(self.allocator);
+        errdefer {
+            for (statementList.items) |i| {
+                i.deinit(self.allocator);
+            }
+            statementList.deinit();
+        }
+
         while (!self.isAtEnd()) {
             const stmt: *Statement = try self.declaration();
             try statementList.append(stmt);
@@ -52,31 +61,31 @@ pub const Parser = struct {
             };
         }
 
-        return self.statement();
+        return try self.statement();
     }
 
-    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn varDeclaration(self: *Self) !*Statement {
         const name: Token = self.advance();
-        std.debug.print("Name: {any}\n", .{name});
+
         var initializer: *Expr = undefined;
+        errdefer initializer.deinit(self.allocator);
+
         if (self.match_one(.EQUAL)) {
             initializer = try self.expression();
-            std.debug.print("Initializer: {any}\n", .{initializer});
         } else {
-            std.debug.print("Initializer void\n", .{});
             initializer = try Literal.create(self.allocator, Literal{ .nil = void{} });
         }
 
         _ = self.advance();
-        return try VarDeclaration.create(self.allocator, name, initializer);
+        const varDecl: *Statement = try VarDeclaration.create(self.allocator, name, initializer);
+        return varDecl;
     }
 
     fn statement(self: *Self) ParserError!*Statement {
         if (self.match_one(.PRINT)) {
-            return self.printStatement();
+            return try self.printStatement();
         }
-        const stmt = self.expressionStatement();
+        const stmt = try self.expressionStatement();
         return stmt;
     }
 
@@ -100,27 +109,34 @@ pub const Parser = struct {
         if (!self.check(.SEMICOLON)) {
             return ParserError.MissingSemicolon;
         }
+
         _ = self.advance();
         const stmt: *Statement = try self.allocator.create(Statement);
         stmt.* = .{ .expression = expr };
+
         return stmt;
     }
 
     fn expression(self: *Self) ParserError!*Expr {
-        const result = try self.comma();
-        return result;
+        return try self.comma();
     }
 
     fn comma(self: *Self) ParserError!*Expr {
         if (self.validate_left_operand()) {
             return ParserError.MissingLeftOperandError;
         }
+
         var expr: *Expr = try self.equality();
+        errdefer expr.deinit(self.allocator);
+
         const matches = [_]TokenType{.COMMA};
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right: *Expr = try self.equality();
+            errdefer right.deinit(self.allocator);
+
             expr = try Binary.create(self.allocator, expr, operator, right);
         }
 
@@ -133,14 +149,19 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.comparison();
+        errdefer expr.deinit(self.allocator);
 
         const matches = [_]TokenType{ .BANG_EQUAL, .EQUAL_EQUAL };
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right = try self.comparison();
+            errdefer right.deinit(self.allocator);
+
             expr = try Binary.create(self.allocator, expr, operator, right);
         }
+
         return expr;
     }
 
@@ -150,14 +171,19 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.term();
+        errdefer expr.deinit(self.allocator);
 
         const matches = [_]TokenType{ .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL };
 
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right: *Expr = try self.term();
+            errdefer right.deinit(self.allocator);
+
             expr = try Binary.create(self.allocator, expr, operator, right);
         }
+
         return expr;
     }
 
@@ -167,14 +193,16 @@ pub const Parser = struct {
         }
 
         var expr: *Expr = try self.factor();
+        errdefer expr.deinit(self.allocator);
 
         const matches = [_]TokenType{ .PLUS, .MINUS };
-
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right: *Expr = try self.factor();
+            errdefer right.deinit(self.allocator);
+
             expr = try Binary.create(self.allocator, expr, operator, right);
-            errdefer expr.deinit(self.allocator);
         }
         return expr;
     }
@@ -186,11 +214,14 @@ pub const Parser = struct {
 
         var expr: *Expr = try self.unary();
         errdefer expr.deinit(self.allocator);
-        const matches = [_]TokenType{ .SLASH, .STAR };
 
+        const matches = [_]TokenType{ .SLASH, .STAR };
         while (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right: *Expr = try self.unary();
+            errdefer right.deinit(self.allocator);
+
             expr = try Binary.create(self.allocator, expr, operator, right);
         }
         return expr;
@@ -205,9 +236,12 @@ pub const Parser = struct {
 
         if (self.match(&matches)) {
             const operator: Token = self.previous();
+
             const right: *Expr = try self.unary();
+            errdefer right.deinit(self.allocator);
 
             const expr = try Unary.create(self.allocator, operator, right);
+            errdefer expr.deinit(self.allocator);
 
             return expr;
         }
@@ -246,11 +280,15 @@ pub const Parser = struct {
             .LEFT_PAREN => {
                 _ = self.advance();
                 const expr: *Expr = try self.expression();
+                errdefer expr.deinit(self.allocator);
 
                 // Check if the right paren is present
                 switch (self.check(.RIGHT_PAREN)) {
                     true => _ = self.advance(),
-                    false => std.debug.panic("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek() }),
+                    false => {
+                        std.log.err("[Line {d}] Error at {any}: expect ')' after expression.", .{ self.peek().line, self.peek() });
+                        return ParserError.InvalidToken;
+                    },
                 }
 
                 return try Grouping.create(self.allocator, expr);
@@ -260,7 +298,9 @@ pub const Parser = struct {
                 const name = self.advance();
                 return try Variable.create(self.allocator, name);
             },
-            else => |invalidToken| std.debug.panic("Error: {any} - Current Token: {any}\n", .{ ParserError.InvalidToken, invalidToken }),
+            else => {
+                return ParserError.InvalidToken;
+            },
         }
     }
 

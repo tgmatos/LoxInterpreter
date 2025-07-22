@@ -1,22 +1,45 @@
 const std = @import("std");
-const S = @import("scanner.zig");
-const T = @import("token.zig");
-const P = @import("parser.zig");
+
+const ParserError = @import("parser.zig").ParserError;
+
 const E = @import("expression.zig");
-
-const Scanner = S.Scanner;
-const TokenType = T.TokenType;
-
-const Parser = P.Parser;
-const ParserError = P.ParserError;
-
 const Expr = E.Expr;
 const Literal = E.Literal;
 const Unary = E.Unary;
 const Binary = E.Binary;
 const Grouping = E.Grouping;
 
-const allocator = std.testing.allocator;
+const S = @import("statement.zig");
+const Statement = S.Statement;
+
+pub fn printStatement(stmt: *Statement) void {
+    switch (stmt.*) {
+        .expression => printExpr(stmt.expression),
+        .print => printExpr(stmt.print.expression),
+        .varDeclaration => printExpr(stmt.varDeclaration.initializer),
+    }
+}
+
+pub fn printExpr(expr: *Expr) void {
+    switch (expr.*) {
+        .binary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.binary.*}),
+        .grouping => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.grouping.*}),
+        .unary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.unary.*}),
+        .literal => {
+            switch (expr.literal.*) {
+                .number => std.debug.print("\x1b[32m{d}\x1b[0m\n", .{expr.literal.number}),
+                .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{expr.literal.string}),
+                .boolean => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.literal.boolean}),
+                .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
+            }
+        },
+        .variable => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.variable.name}),
+    }
+}
+
+pub fn printError(err: ParserError) void {
+    std.log.err("\x1b[31m{any}\x1b[0m", .{err});
+}
 
 pub fn printAST(expr: *Expr) void {
     switch (expr.*) {

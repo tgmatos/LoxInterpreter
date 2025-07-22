@@ -6,6 +6,8 @@ const Expr = E.Expr;
 const T = @import("token.zig");
 const Token = T.Token;
 
+const Util = @import("util.zig");
+
 pub const Statement = union(enum) {
     const Self = @This();
     expression: *Expr,
@@ -63,22 +65,7 @@ pub const Print = struct {
     pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !void {
         const expr: *Expr = try self.expression.evaluate(allocator);
         defer expr.deinit(allocator);
-        switch (expr.*) {
-            .binary => std.debug.print("{any}\n", .{expr.binary.*}),
-            .grouping => std.debug.print("{any}\n", .{expr.grouping.*}),
-            .unary => std.debug.print("{any}\n", .{expr.unary.*}),
-            .literal => {
-                switch (expr.literal.*) {
-                    .number => std.debug.print("{d}\n", .{expr.literal.number}),
-                    .string => std.debug.print("\"{s}\"\n", .{expr.literal.string}),
-                    .boolean => std.debug.print("{any}\n", .{expr.literal.boolean}),
-                    .nil => std.debug.print("nil\n", .{}),
-                }
-            },
-            .variable => {
-                std.debug.print("{any}\n", .{expr.variable.name});
-            },
-        }
+        Util.printExpr(expr);
     }
 };
 
@@ -94,5 +81,11 @@ pub const VarDeclaration = struct {
         const statement = try allocator.create(Statement);
         statement.* = .{ .varDeclaration = varDecl };
         return statement;
+    }
+
+    pub fn deinit(self: *Self, allocator: std.mem.Allocator) !void {
+        std.debug.print("Deiniting varDcle\n", .{});
+        self.initializer.deinit(allocator);
+        allocator.destroy(self);
     }
 };
