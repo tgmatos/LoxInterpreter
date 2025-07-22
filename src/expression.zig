@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const Util = @import("util.zig");
 const To = @import("token.zig");
 const Token = To.Token;
@@ -16,20 +17,32 @@ pub const Expr = union(enum) {
     unary: *Unary,
     binary: *Binary,
     grouping: *Grouping,
+    variable: *Variable,
 
     pub fn evaluate(expr: *Self, allocator: std.mem.Allocator) RuntimeError!*Expr {
         switch (expr.*) {
             .literal => {
                 const literal: *Literal = try allocator.create(Literal);
-                literal.* = expr.literal.*;
+
+                if (activeTag(expr.literal.*) == Literal.string) {
+                    const str = try allocator.alloc(u8, expr.literal.string.len);
+                    @memcpy(str, expr.literal.string);
+                    literal.* = expr.literal.*;
+                    literal.*.string = str;
+                } else {
+                    literal.* = expr.literal.*;
+                }
+
                 const cpyExpr: *Expr = try allocator.create(Expr);
                 cpyExpr.* = .{ .literal = literal };
-                std.debug.print("Literal: {any}\n", .{cpyExpr});
                 return cpyExpr;
             },
             .grouping => return try Grouping.evaluate(expr.grouping.*, allocator),
             .unary => return try Unary.evaluate(expr.unary.*, allocator),
             .binary => return try Binary.evaluate(expr.binary.*, allocator),
+            .variable => {
+                return expr;
+            },
         }
     }
 
@@ -52,6 +65,9 @@ pub const Expr = union(enum) {
             .binary => |v| {
                 v.exprLeft.deinit(allocator);
                 v.exprRight.deinit(allocator);
+                allocator.destroy(v);
+            },
+            .variable => |v| {
                 allocator.destroy(v);
             },
         }
@@ -423,10 +439,25 @@ pub const Binary = struct {
     }
 };
 
+pub const Variable = struct {
+    name: Token,
+
+    pub fn create(allocator: std.mem.Allocator, name: Token) !*Expr {
+        var variable = try allocator.create(Variable);
+        variable.name = name;
+
+        const expr = try allocator.create(Expr);
+        expr.* = .{ .variable = variable };
+        return expr;
+    }
+};
+
 // program        → statement* EOF ;
 // statement      → exprStmt
-//                | printStmt ;
+//                | printStmt
+//                | varDecl;
 
+// varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
 // expression     → literal
@@ -440,3 +471,15 @@ pub const Binary = struct {
 // binary         → expression operator expression ;
 // operator       → "==" | "!=" | "<" | "<=" | ">" | ">="
 //                | "+"  | "-"  | "*" | "/" | "," ;
+
+// expression     → comma
+// comma          → equality ( (",") equality)*
+// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+// term           → factor ( ( "-" | "+" ) factor )* ;
+// factor         → unary ( ( "/" | "*" ) unary )* ;
+// unary          → ( "!" | "-" ) unary
+//                | primary ;
+// primary        → NUMBER | STRING | "true" | "false" | "nil"
+//                | "(" expression ")"
+//                | IDENTIFIER ;

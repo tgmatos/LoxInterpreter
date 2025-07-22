@@ -1,25 +1,29 @@
 const std = @import("std");
-const T = @import("token.zig");
-const E = @import("expression.zig");
-const S = @import("statement.zig");
-
 const ArrayList = std.ArrayList;
-
 const OutOfMemory = std.mem.Allocator.Error.OutOfMemory;
 
+const T = @import("token.zig");
 const Token = T.Token;
 const TokenType = T.TokenType;
+
+const E = @import("expression.zig");
 const Expr = E.Expr;
 const Binary = E.Binary;
 const Unary = E.Unary;
 const Literal = E.Literal;
 const LiteralType = E.LiteralType;
 const Grouping = E.Grouping;
+const Variable = E.Variable;
 
+const S = @import("statement.zig");
 const Statement = S.Statement;
 const Print = S.Print;
+const VarDeclaration = S.VarDeclaration;
 
-pub const ParserError = error{ RightParenNotPresent, TokenInvalid, MissingLeftOperandError, OutOfMemory, MissingSemicolon };
+// const D = @import("declaration.zig");
+// const Declaration = D.Declaration;
+
+pub const ParserError = error{ RightParenNotPresent, InvalidToken, MissingLeftOperandError, OutOfMemory, MissingSemicolon };
 
 pub const Parser = struct {
     const Self = @This();
@@ -38,6 +42,32 @@ pub const Parser = struct {
             try statementList.append(stmt);
         }
         return statementList;
+    }
+
+    fn declaration(self: *Self) !*Statement {
+        if (self.match_one(.VAR)) {
+            return self.varDeclaration() catch |err| {
+                self.synchronize();
+                return err;
+            };
+        }
+
+        return self.statement();
+    }
+
+    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    fn varDeclaration(self: *Self) !*Statement {
+        const name: Token = self.advance();
+        const initializer: *Expr = undefined;
+        if (self.match_one(.EQUAL)) {
+            initializer = try self.expression();
+        } else {
+            initializer = Literal.create(self.allocator, Literal{ .nil = void });
+        }
+
+        _ = self.advance();
+
+        return try VarDeclaration.create(self.allocator, name, initializer);
     }
 
     fn statement(self: *Self) ParserError!*Statement {
@@ -223,7 +253,12 @@ pub const Parser = struct {
 
                 return try Grouping.create(self.allocator, expr);
             },
-            else => |invalidToken| std.debug.panic("Error: {any} - Current Token: {any}\n", .{ ParserError.TokenInvalid, invalidToken }),
+            .IDENTIFIER => {
+                _ = self.advance();
+                const name = self.advance();
+                return try Variable.create(self.allocator, name);
+            },
+            else => |invalidToken| std.debug.panic("Error: {any} - Current Token: {any}\n", .{ ParserError.InvalidToken, invalidToken }),
         }
     }
 
@@ -325,7 +360,8 @@ pub const Parser = struct {
 // unary          → ( "!" | "-" ) unary
 //                | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
-//                | "(" expression ")" ;
+//                | "(" expression ")"
+//                | IDENTIFIER ;
 
 // Add error productions to handle each binary operator appearing without a left-hand operand.
 // In other words, detect a binary operator appearing at the beginning of an expression.

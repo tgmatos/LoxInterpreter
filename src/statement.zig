@@ -1,14 +1,18 @@
 const std = @import("std");
+
 const E = @import("expression.zig");
-const Util = @import("util.zig");
-const Expression = E.Expr;
+const Expr = E.Expr;
+
+const T = @import("token.zig");
+const Token = T.Token;
 
 pub const Statement = union(enum) {
     const Self = @This();
-    expression: *Expression,
+    expression: *Expr,
     print: *Print,
+    varDeclaration: *VarDeclaration,
 
-    pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !?*Expression {
+    pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !?*Expr {
         switch (self.*) {
             .expression => {
                 return try self.expression.evaluate(allocator);
@@ -16,6 +20,10 @@ pub const Statement = union(enum) {
             .print => {
                 try self.print.evaluate(allocator);
                 return null;
+            },
+            .varDeclaration => {
+                return null;
+                // return self.varDeclaration;
             },
         }
     }
@@ -31,15 +39,19 @@ pub const Statement = union(enum) {
                 allocator.destroy(self.print);
                 allocator.destroy(self);
             },
+            .varDeclaration => {
+                self.varDeclaration.initializer.deinit(allocator);
+                allocator.destroy(self);
+            },
         }
     }
 };
 
 pub const Print = struct {
     const Self = @This();
-    expression: *Expression,
+    expression: *Expr,
 
-    pub fn create(allocator: std.mem.Allocator, expr: *Expression) !*Statement {
+    pub fn create(allocator: std.mem.Allocator, expr: *Expr) !*Statement {
         var printStmt = try allocator.create(Print);
         const stmt = try allocator.create(Statement);
         printStmt.expression = expr;
@@ -48,7 +60,7 @@ pub const Print = struct {
     }
 
     pub fn evaluate(self: *Self, allocator: std.mem.Allocator) !void {
-        const expr: *Expression = try self.expression.evaluate(allocator);
+        const expr: *Expr = try self.expression.evaluate(allocator);
         defer expr.deinit(allocator);
         switch (expr.*) {
             .binary => std.debug.print("{any}\n", .{expr.binary.*}),
@@ -62,6 +74,24 @@ pub const Print = struct {
                     .nil => std.debug.print("nil\n", .{}),
                 }
             },
+            .variable => {
+                std.debug.print("{any}\n", .{expr.variable.name});
+            },
         }
+    }
+};
+
+pub const VarDeclaration = struct {
+    const Self = @This();
+    name: Token,
+    initializer: *Expr,
+
+    pub fn create(allocator: std.mem.Allocator, name: Token, initializer: *Expr) !Statement {
+        const varDecl = try allocator.create(VarDeclaration);
+        varDecl.* = .{ .initializer = initializer, .name = name };
+
+        const statement = try allocator.create(Statement);
+        statement.* = .{ .varDeclaration = varDecl };
+        return statement;
     }
 };

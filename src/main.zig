@@ -24,7 +24,6 @@ fn run(source: []u8) void {
 }
 
 fn runPrompt() !void {
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -78,6 +77,7 @@ fn runPrompt() !void {
                         .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
                     }
                 },
+                .variable => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.variable.name}),
             }
         }
         std.debug.print("> ", .{});
