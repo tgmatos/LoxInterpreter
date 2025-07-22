@@ -50,34 +50,40 @@ fn runPrompt() !void {
         for (statementList.items) |stmt| {
             defer stmt.deinit(allocator);
 
-            if (stmt.* == .print) {
-                _ = stmt.evaluate(allocator) catch |err| {
-                    std.log.err("{any}\n", .{err});
-                };
-                continue;
-            }
+            switch (stmt.*) {
+                .print => {
+                    _ = stmt.evaluate(allocator) catch |err| {
+                        std.log.err("\x1b[32m{any}\x1b[0m\n", .{err});
+                    };
+                    continue;
+                },
+                .expression => {
+                    const b = stmt.evaluate(allocator) catch |err| {
+                        std.log.err("{any}", .{err});
+                        std.debug.print("> ", .{});
+                        continue;
+                    };
 
-            const b = stmt.evaluate(allocator) catch |err| {
-                std.log.err("{any}", .{err});
-                std.debug.print("> ", .{});
-                continue;
-            };
-
-            const a = b.?;
-            defer a.deinit(allocator);
-            switch (a.*) {
-                .binary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.binary.*}),
-                .grouping => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.grouping.*}),
-                .unary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.unary.*}),
-                .literal => {
-                    switch (a.literal.*) {
-                        .number => std.debug.print("\x1b[32m{d}\x1b[0m\n", .{a.literal.number}),
-                        .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{a.literal.string}),
-                        .boolean => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.literal.boolean}),
-                        .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
+                    const a = b.?;
+                    defer a.deinit(allocator);
+                    switch (a.*) {
+                        .binary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.binary.*}),
+                        .grouping => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.grouping.*}),
+                        .unary => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.unary.*}),
+                        .literal => {
+                            switch (a.literal.*) {
+                                .number => std.debug.print("\x1b[32m{d}\x1b[0m\n", .{a.literal.number}),
+                                .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{a.literal.string}),
+                                .boolean => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.literal.boolean}),
+                                .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
+                            }
+                        },
+                        .variable => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.variable.name}),
                     }
                 },
-                .variable => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{a.variable.name}),
+                .varDeclaration => {
+                    std.debug.print("\x1b[32m{any}\x1b[0m\n", .{stmt.varDeclaration.initializer.*});
+                },
             }
         }
         std.debug.print("> ", .{});

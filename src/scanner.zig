@@ -258,8 +258,7 @@ pub const Scanner = struct {
         if (ttype) |tokentype| {
             return self.makeKeywordToken(tokentype);
         } else {
-            report(self.line, "", "Invalid Identifier");
-            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
+            return Token{ .kind = .IDENTIFIER, .line = self.line, .lexeme = str, .literal = null };
         }
     }
 };

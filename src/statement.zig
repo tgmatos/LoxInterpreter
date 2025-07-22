@@ -41,6 +41,7 @@ pub const Statement = union(enum) {
             },
             .varDeclaration => {
                 self.varDeclaration.initializer.deinit(allocator);
+                allocator.destroy(self.varDeclaration);
                 allocator.destroy(self);
             },
         }
@@ -86,7 +87,7 @@ pub const VarDeclaration = struct {
     name: Token,
     initializer: *Expr,
 
-    pub fn create(allocator: std.mem.Allocator, name: Token, initializer: *Expr) !Statement {
+    pub fn create(allocator: std.mem.Allocator, name: Token, initializer: *Expr) !*Statement {
         const varDecl = try allocator.create(VarDeclaration);
         varDecl.* = .{ .initializer = initializer, .name = name };
 

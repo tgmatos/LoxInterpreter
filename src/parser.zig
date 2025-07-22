@@ -38,7 +38,7 @@ pub const Parser = struct {
     pub fn parser(self: *Self) !ArrayList(*Statement) {
         var statementList = ArrayList(*Statement).init(self.allocator);
         while (!self.isAtEnd()) {
-            const stmt: *Statement = try self.statement();
+            const stmt: *Statement = try self.declaration();
             try statementList.append(stmt);
         }
         return statementList;
@@ -58,15 +58,17 @@ pub const Parser = struct {
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
     fn varDeclaration(self: *Self) !*Statement {
         const name: Token = self.advance();
-        const initializer: *Expr = undefined;
+        std.debug.print("Name: {any}\n", .{name});
+        var initializer: *Expr = undefined;
         if (self.match_one(.EQUAL)) {
             initializer = try self.expression();
+            std.debug.print("Initializer: {any}\n", .{initializer});
         } else {
-            initializer = Literal.create(self.allocator, Literal{ .nil = void });
+            std.debug.print("Initializer void\n", .{});
+            initializer = try Literal.create(self.allocator, Literal{ .nil = void{} });
         }
 
         _ = self.advance();
-
         return try VarDeclaration.create(self.allocator, name, initializer);
     }
 
@@ -263,7 +265,7 @@ pub const Parser = struct {
     }
 
     fn synchronize(self: *Self) void {
-        self.advance();
+        _ = self.advance();
 
         while (!self.isAtEnd()) {
             if (self.previous().kind == .SEMICOLON) {
@@ -279,6 +281,7 @@ pub const Parser = struct {
                 .WHILE => return,
                 .PRINT => return,
                 .RETURN => return,
+                else => return,
             }
 
             self.advance();
