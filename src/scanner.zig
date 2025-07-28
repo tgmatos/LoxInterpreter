@@ -55,7 +55,7 @@ pub const Scanner = struct {
     }
 
     fn scanToken(self: *Self, source: []const u8) ?Token {
-        var b = true;
+        var b: bool = true;
         while (!self.isAtEnd(source) and b) {
             b = self.parseWhitespace(source, source[self.current]);
         }

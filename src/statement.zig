@@ -55,8 +55,8 @@ pub const Print = struct {
     expression: *Expr,
 
     pub fn create(allocator: std.mem.Allocator, expr: *Expr) !*Statement {
-        var printStmt = try allocator.create(Print);
-        const stmt = try allocator.create(Statement);
+        var printStmt: *Print = try allocator.create(Print);
+        const stmt: *Statement = try allocator.create(Statement);
         printStmt.expression = expr;
         stmt.* = .{ .print = printStmt };
         return stmt;
@@ -75,10 +75,10 @@ pub const VarDeclaration = struct {
     initializer: *Expr,
 
     pub fn create(allocator: std.mem.Allocator, name: Token, initializer: *Expr) !*Statement {
-        const varDecl = try allocator.create(VarDeclaration);
+        const varDecl: *VarDeclaration = try allocator.create(VarDeclaration);
         varDecl.* = .{ .initializer = initializer, .name = name };
 
-        const statement = try allocator.create(Statement);
+        const statement: *Statement = try allocator.create(Statement);
         statement.* = .{ .varDeclaration = varDecl };
         return statement;
     }

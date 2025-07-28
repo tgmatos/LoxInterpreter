@@ -26,7 +26,7 @@ fn run(source: []u8) void {
 fn runPrompt() !void {
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    const allocator: std.mem.Allocator = gpa.allocator();
 
     const stdin = std.io.getStdIn();
     var buf_reader = std.io.bufferedReader(stdin.reader());
@@ -53,13 +53,14 @@ fn runPrompt() !void {
             switch (stmt.*) {
                 .print => {
                     _ = stmt.evaluate(allocator) catch |err| {
-                        Util.printError(err);
+                        std.log.err("\x1b[31m{any}\x1b[0m", .{err});
+                        std.debug.print("> ", .{});
                     };
                     continue;
                 },
                 .expression => {
                     const b = stmt.evaluate(allocator) catch |err| {
-                        Util.printError(err);
+                        std.log.err("\x1b[31m{any}\x1b[0m", .{err});
                         std.debug.print("> ", .{});
                         continue;
                     };

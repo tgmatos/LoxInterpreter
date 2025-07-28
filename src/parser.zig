@@ -38,7 +38,7 @@ pub const Parser = struct {
     }
 
     pub fn parser(self: *Self) !ArrayList(*Statement) {
-        var statementList = ArrayList(*Statement).init(self.allocator);
+        var statementList: ArrayList(*Statement) = ArrayList(*Statement).init(self.allocator);
         errdefer {
             for (statementList.items) |i| {
                 i.deinit(self.allocator);
@@ -85,8 +85,7 @@ pub const Parser = struct {
         if (self.match_one(.PRINT)) {
             return try self.printStatement();
         }
-        const stmt = try self.expressionStatement();
-        return stmt;
+        return try self.expressionStatement();
     }
 
     fn printStatement(self: *Self) ParserError!*Statement {
@@ -98,8 +97,7 @@ pub const Parser = struct {
         }
 
         _ = self.advance();
-        const stmt: *Statement = try Print.create(self.allocator, expr);
-        return stmt;
+        return try Print.create(self.allocator, expr);
     }
 
     fn expressionStatement(self: *Self) ParserError!*Statement {
@@ -113,7 +111,6 @@ pub const Parser = struct {
         _ = self.advance();
         const stmt: *Statement = try self.allocator.create(Statement);
         stmt.* = .{ .expression = expr };
-
         return stmt;
     }
 
@@ -156,7 +153,7 @@ pub const Parser = struct {
         while (self.match(&matches)) {
             const operator: Token = self.previous();
 
-            const right = try self.comparison();
+            const right: *Expr = try self.comparison();
             errdefer right.deinit(self.allocator);
 
             expr = try Binary.create(self.allocator, expr, operator, right);
@@ -240,7 +237,7 @@ pub const Parser = struct {
             const right: *Expr = try self.unary();
             errdefer right.deinit(self.allocator);
 
-            const expr = try Unary.create(self.allocator, operator, right);
+            const expr: *Expr = try Unary.create(self.allocator, operator, right);
             errdefer expr.deinit(self.allocator);
 
             return expr;

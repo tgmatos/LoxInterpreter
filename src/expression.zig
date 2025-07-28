@@ -100,8 +100,8 @@ pub const Grouping = struct {
     expr: *Expr,
 
     pub fn create(allocator: std.mem.Allocator, expression: *Expr) !*Expr {
-        var grouping = try allocator.create(Grouping);
-        const expr = try allocator.create(Expr);
+        var grouping: *Grouping = try allocator.create(Grouping);
+        const expr: *Expr = try allocator.create(Expr);
         grouping.expr = expression;
         expr.* = .{ .grouping = grouping };
         return expr;
@@ -117,8 +117,8 @@ pub const Unary = struct {
     right: *Expr,
 
     pub fn create(allocator: std.mem.Allocator, operator: Token, right: *Expr) !*Expr {
-        var unary = try allocator.create(Unary);
-        const expr = try allocator.create(Expr);
+        var unary: *Unary = try allocator.create(Unary);
+        const expr: *Expr = try allocator.create(Expr);
         unary.operator = operator;
         unary.right = right;
         expr.* = .{ .unary = unary };
@@ -126,13 +126,13 @@ pub const Unary = struct {
     }
 
     pub fn evaluate(unary: Unary, allocator: std.mem.Allocator) RuntimeError!*Expr {
-        const right = try unary.right.evaluate(allocator);
+        const right: *Expr = try unary.right.evaluate(allocator);
         defer right.deinit(allocator);
 
-        const expr = try allocator.create(Expr);
+        const expr: *Expr = try allocator.create(Expr);
         errdefer allocator.destroy(expr);
 
-        const literal = try allocator.create(Literal);
+        const literal: *Literal = try allocator.create(Literal);
         errdefer allocator.destroy(literal);
 
         return switch (unary.operator.kind) {
@@ -187,8 +187,8 @@ pub const Binary = struct {
     exprRight: *Expr,
 
     pub fn create(allocator: std.mem.Allocator, left: *Expr, operator: Token, right: *Expr) !*Expr {
-        var binary = try allocator.create(Binary);
-        const expr = try allocator.create(Expr);
+        var binary: *Binary = try allocator.create(Binary);
+        const expr: *Expr = try allocator.create(Expr);
         binary.exprLeft = left;
         binary.operator = operator;
         binary.exprRight = right;
@@ -197,16 +197,16 @@ pub const Binary = struct {
     }
 
     pub fn evaluate(binary: Binary, allocator: std.mem.Allocator) RuntimeError!*Expr {
-        const left = try binary.exprLeft.evaluate(allocator);
+        const left: *Expr = try binary.exprLeft.evaluate(allocator);
         defer left.deinit(allocator);
 
-        const right = try binary.exprRight.evaluate(allocator);
+        const right: *Expr = try binary.exprRight.evaluate(allocator);
         defer right.deinit(allocator);
 
-        const expr = try allocator.create(Expr);
+        const expr: *Expr = try allocator.create(Expr);
         errdefer allocator.destroy(expr);
 
-        const literal = try allocator.create(Literal);
+        const literal: *Literal = try allocator.create(Literal);
         errdefer allocator.destroy(literal);
 
         return switch (binary.operator.kind) {
@@ -443,10 +443,10 @@ pub const Variable = struct {
     name: Token,
 
     pub fn create(allocator: std.mem.Allocator, name: Token) !*Expr {
-        var variable = try allocator.create(Variable);
+        var variable: *Variable = try allocator.create(Variable);
         variable.name = name;
 
-        const expr = try allocator.create(Expr);
+        const expr: *Expr = try allocator.create(Expr);
         expr.* = .{ .variable = variable };
         return expr;
     }
