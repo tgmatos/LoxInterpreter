@@ -6,7 +6,7 @@ const Literal = T.Literal;
 
 pub const Scanner = struct {
     const Self = @This();
-    tokens: std.ArrayList(Token),
+    tokens: std.ArrayList(*Token),
     keywords: std.StaticStringMap(TokenType),
     start: u32,
     current: u32,
@@ -33,28 +33,33 @@ pub const Scanner = struct {
             .{ "var", TokenType.VAR },
             .{ "while", TokenType.WHILE },
         });
-        return .{ .start = 0, .current = 0, .line = 1, .tokens = std.ArrayList(Token).init(allocator), .keywords = hashmap, .allocator = allocator };
+
+        const tokens = try std.ArrayList(*Token).initCapacity(allocator, 0);
+        return .{ .start = 0, .current = 0, .line = 1, .tokens = tokens, .keywords = hashmap, .allocator = allocator };
     }
 
     pub fn deinit(self: *Self) void {
-        self.tokens.deinit();
+        for (self.tokens.items) |item| {
+            item.deinit(self.allocator);
+        }
+        self.tokens.deinit(self.allocator);
     }
 
-    pub fn scanTokens(self: *Self, source: []const u8) !std.ArrayList(Token) {
+    pub fn scanTokens(self: *Self, source: []const u8) !std.ArrayList(*Token) {
         while (self.current < source.len) {
             const token = scanToken(self, source);
             if (token) |t| {
-                try self.tokens.append(t);
+                try self.tokens.append(self.allocator, t);
             }
             self.current += 1;
         }
 
-        const eof = Token{ .kind = .EOF, .lexeme = "", .line = self.line, .literal = null };
-        try self.tokens.append(eof);
+        const eof = Token.init(self.allocator, .EOF, "", null, self.line);
+        try self.tokens.append(self.allocator, eof);
         return self.tokens;
     }
 
-    fn scanToken(self: *Self, source: []const u8) ?Token {
+    fn scanToken(self: *Self, source: []const u8) ?*Token {
         var b: bool = true;
         while (!self.isAtEnd(source) and b) {
             b = self.parseWhitespace(source, source[self.current]);
@@ -130,7 +135,8 @@ pub const Scanner = struct {
                     return self.identifier(source);
                 } else {
                     report(self.line, "", "Unexpected character.");
-                    return Token{ .kind = TokenType.ERROR, .lexeme = "", .line = self.line, .literal = null };
+                    const token = Token.init(self.allocator, .ERROR, "", null, self.line);
+                    return token;
                 }
             },
         };
@@ -175,16 +181,16 @@ pub const Scanner = struct {
         return isAlpha(c) or isDigit(c);
     }
 
-    fn makeTokenSingle(self: *Self, kind: T.TokenType, source: []const u8) Token {
-        return Token{ .kind = kind, .lexeme = source, .line = self.line, .literal = null };
+    fn makeTokenSingle(self: *Self, kind: T.TokenType, source: []const u8) *Token {
+        return Token.init(self.allocator, kind, source, null, self.line);
     }
 
-    fn makeToken(self: *Self, kind: T.TokenType, value: Literal) Token {
-        return Token{ .kind = kind, .literal = value, .lexeme = "", .line = self.line };
+    fn makeToken(self: *Self, kind: T.TokenType, value: Literal) *Token {
+        return Token.init(self.allocator, kind, "", value, self.line);
     }
 
-    fn makeKeywordToken(self: *Self, kind: T.TokenType) Token {
-        return Token{ .kind = kind, .lexeme = "", .line = self.line, .literal = null };
+    fn makeKeywordToken(self: *Self, kind: T.TokenType) *Token {
+        return Token.init(self.allocator, kind, "", null, self.line);
     }
 
     fn match(self: *Self, source: []const u8, expected: u8) bool {
@@ -199,7 +205,7 @@ pub const Scanner = struct {
         std.log.err("[line {d}] Error {s}: {s}\n", .{ line, where, message });
     }
 
-    fn parseString(self: *Self, source: []const u8) Token {
+    fn parseString(self: *Self, source: []const u8) *Token {
         while ((self.current + 1 < source.len) and (source[self.current + 1] != '"')) {
             if (source[self.current + 1] == '\n') {
                 self.line += 1;
@@ -209,21 +215,22 @@ pub const Scanner = struct {
 
         if (self.current + 1 >= source.len) {
             report(self.line, "", "Unterminated string");
-            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
+            return Token.init(self.allocator, .ERROR, "", null, self.line);
         }
 
         self.current += 1;
         const str = source[self.start + 1 .. self.current];
         const allocated_str = self.allocator.alloc(u8, str.len) catch |err| {
-            std.log.err("Error: {any}", .{err});
+            std.log.err("{any}", .{err});
             @panic("Aborted!");
         };
+        defer self.allocator.free(allocated_str);
         @memcpy(allocated_str, str);
         const value = Literal{ .string = allocated_str };
         return self.makeToken(TokenType.STRING, value);
     }
 
-    fn parseNumber(self: *Self, source: []const u8) Token {
+    fn parseNumber(self: *Self, source: []const u8) *Token {
         while (!self.isAtEnd(source) and isDigit(source[self.current])) {
             self.current += 1;
         }
@@ -239,14 +246,14 @@ pub const Scanner = struct {
         const number_str = source[self.start..self.current];
         const number = std.fmt.parseFloat(f64, number_str) catch {
             report(self.line, "", "Number invalid");
-            return Token{ .kind = .ERROR, .line = self.line, .lexeme = "", .literal = null };
+            return Token.init(self.allocator, .ERROR, "", null, self.line);
         };
         const literal = Literal{ .number = number };
         self.current -= 1;
         return self.makeToken(TokenType.NUMBER, literal);
     }
 
-    fn identifier(self: *Self, source: []const u8) Token {
+    fn identifier(self: *Self, source: []const u8) *Token {
         while (!self.isAtEnd(source) and isAlphaNumeric(source[self.current])) {
             self.current += 1;
         }
@@ -258,7 +265,7 @@ pub const Scanner = struct {
         if (ttype) |tokentype| {
             return self.makeKeywordToken(tokentype);
         } else {
-            return Token{ .kind = .IDENTIFIER, .line = self.line, .lexeme = str, .literal = null };
+            return Token.init(self.allocator, .IDENTIFIER, str, null, self.line);
         }
     }
 };

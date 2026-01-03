@@ -22,33 +22,30 @@ const VarDeclaration = S.VarDeclaration;
 
 const Util = @import("util.zig");
 
-// const D = @import("declaration.zig");
-// const Declaration = D.Declaration;
-
 pub const ParserError = error{ RightParenNotPresent, InvalidToken, MissingLeftOperandError, OutOfMemory, MissingSemicolon };
 
 pub const Parser = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     current: usize,
-    tokens: *const std.ArrayList(Token),
+    tokens: *const std.ArrayList(*Token),
 
-    pub fn init(allocator: std.mem.Allocator, tokens: *const std.ArrayList(Token)) Parser {
+    pub fn init(allocator: std.mem.Allocator, tokens: *const std.ArrayList(*Token)) Parser {
         return .{ .allocator = allocator, .current = 0, .tokens = tokens };
     }
 
     pub fn parser(self: *Self) !ArrayList(*Statement) {
-        var statementList: ArrayList(*Statement) = ArrayList(*Statement).init(self.allocator);
+        var statementList: ArrayList(*Statement) = try ArrayList(*Statement).initCapacity(self.allocator, 0);
         errdefer {
             for (statementList.items) |i| {
                 i.deinit(self.allocator);
             }
-            statementList.deinit();
+            statementList.deinit(self.allocator);
         }
 
         while (!self.isAtEnd()) {
             const stmt: *Statement = try self.declaration();
-            try statementList.append(stmt);
+            try statementList.append(self.allocator, stmt);
         }
         return statementList;
     }
@@ -60,12 +57,11 @@ pub const Parser = struct {
                 return err;
             };
         }
-
         return try self.statement();
     }
 
     fn varDeclaration(self: *Self) !*Statement {
-        const name: Token = self.advance();
+        const name: *Token = self.advance();
 
         var initializer: *Expr = undefined;
         errdefer initializer.deinit(self.allocator);
@@ -76,7 +72,10 @@ pub const Parser = struct {
             initializer = try Literal.create(self.allocator, Literal{ .nil = void{} });
         }
 
-        _ = self.advance();
+        if (!self.match_one(.SEMICOLON)) {
+            return ParserError.MissingSemicolon;
+        }
+
         const varDecl: *Statement = try VarDeclaration.create(self.allocator, name, initializer);
         return varDecl;
     }
@@ -92,7 +91,7 @@ pub const Parser = struct {
         const expr: *Expr = try self.expression();
         errdefer expr.deinit(self.allocator);
 
-        if (!self.check(.SEMICOLON)) {
+        if (!self.match_one(.SEMICOLON)) {
             return ParserError.MissingSemicolon;
         }
 
@@ -104,7 +103,7 @@ pub const Parser = struct {
         const expr: *Expr = try self.expression();
         errdefer expr.deinit(self.allocator);
 
-        if (!self.check(.SEMICOLON)) {
+        if (!self.match_one(.SEMICOLON)) {
             return ParserError.MissingSemicolon;
         }
 
@@ -129,7 +128,7 @@ pub const Parser = struct {
         const matches = [_]TokenType{.COMMA};
 
         while (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.equality();
             errdefer right.deinit(self.allocator);
@@ -151,7 +150,7 @@ pub const Parser = struct {
         const matches = [_]TokenType{ .BANG_EQUAL, .EQUAL_EQUAL };
 
         while (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.comparison();
             errdefer right.deinit(self.allocator);
@@ -173,7 +172,7 @@ pub const Parser = struct {
         const matches = [_]TokenType{ .GREATER, .GREATER_EQUAL, .LESS, .LESS_EQUAL };
 
         while (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.term();
             errdefer right.deinit(self.allocator);
@@ -194,7 +193,7 @@ pub const Parser = struct {
 
         const matches = [_]TokenType{ .PLUS, .MINUS };
         while (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.factor();
             errdefer right.deinit(self.allocator);
@@ -214,7 +213,7 @@ pub const Parser = struct {
 
         const matches = [_]TokenType{ .SLASH, .STAR };
         while (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.unary();
             errdefer right.deinit(self.allocator);
@@ -232,7 +231,7 @@ pub const Parser = struct {
         const matches = [_]TokenType{ .BANG, .MINUS };
 
         if (self.match(&matches)) {
-            const operator: Token = self.previous();
+            const operator: *Token = self.previous();
 
             const right: *Expr = try self.unary();
             errdefer right.deinit(self.allocator);
@@ -270,7 +269,9 @@ pub const Parser = struct {
             },
             .STRING => {
                 _ = self.advance();
-                return try Literal.create(self.allocator, Literal{ .string = self.previous().literal.?.string });
+                const str = try self.allocator.alloc(u8, self.previous().literal.?.string.len);
+                @memcpy(str, self.previous().literal.?.string);
+                return try Literal.create(self.allocator, Literal{ .string = str });
             },
 
             // Handle the parens
@@ -291,9 +292,10 @@ pub const Parser = struct {
                 return try Grouping.create(self.allocator, expr);
             },
             .IDENTIFIER => {
-                _ = self.advance();
-                const name = self.advance();
-                return try Variable.create(self.allocator, name);
+                // _ = self.advance();
+
+                const x = self.advance();
+                return try Variable.create(self.allocator, x);
             },
             else => {
                 return ParserError.InvalidToken;
@@ -370,7 +372,7 @@ pub const Parser = struct {
         return self.peek().kind == tokenType;
     }
 
-    fn advance(self: *Self) Token {
+    fn advance(self: *Self) *Token {
         if (!self.isAtEnd()) {
             self.current += 1;
         }
@@ -382,11 +384,11 @@ pub const Parser = struct {
         return self.peek().kind == TokenType.EOF;
     }
 
-    fn peek(self: Self) Token {
+    fn peek(self: Self) *Token {
         return self.tokens.items[self.current];
     }
 
-    fn previous(self: Self) Token {
+    fn previous(self: Self) *Token {
         return self.tokens.items[self.current - 1];
     }
 };

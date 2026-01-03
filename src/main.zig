@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const token = @import("token.zig");
 const Scanner = @import("scanner.zig").Scanner;
 const Parser = @import("parser.zig").Parser;
@@ -10,6 +11,9 @@ const Binary = E.Binary;
 const Unary = E.Unary;
 const Grouping = E.Grouping;
 const Literal = E.Literal;
+
+const Env = @import("environment.zig");
+const Environment = Env.Environment;
 
 pub fn main() !void {
     try runPrompt();
@@ -28,53 +32,64 @@ fn runPrompt() !void {
     defer _ = gpa.deinit();
     const allocator: std.mem.Allocator = gpa.allocator();
 
-    const stdin = std.io.getStdIn();
-    var buf_reader = std.io.bufferedReader(stdin.reader());
-    var input = buf_reader.reader();
-    var line: [1024 * 1024]u8 = undefined;
+    var stdin: std.fs.File = std.fs.File.stdin();
+    var stdin_buffer: [1024 * 1024]u8 = undefined;
+    var reader = stdin.readerStreaming(&stdin_buffer);
+    var input: *std.io.Reader = &reader.interface;
     std.debug.print("> ", .{});
 
-    while (try input.readUntilDelimiterOrEof(&line, '\n')) |x| {
+    // Attention here, maybe the env should not be "global"
+    const env: *Environment = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    while (input.takeDelimiterInclusive('\n')) |x| {
         var scanner = try Scanner.init(allocator);
         const ts = try scanner.scanTokens(x);
         defer scanner.deinit();
 
         var parser: Parser = Parser.init(allocator, &ts);
-        const statementList = parser.parser() catch |err| {
+        var statementList = parser.parser() catch |err| {
             Util.printError(err);
             std.debug.print("> ", .{});
             continue;
         };
-        defer statementList.deinit();
+        defer statementList.deinit(allocator);
 
         for (statementList.items) |stmt| {
             defer stmt.deinit(allocator);
 
             switch (stmt.*) {
                 .print => {
-                    _ = stmt.evaluate(allocator) catch |err| {
+                    _ = stmt.evaluate(allocator, env) catch |err| {
                         std.log.err("\x1b[31m{any}\x1b[0m", .{err});
                         std.debug.print("> ", .{});
                     };
                     continue;
                 },
                 .expression => {
-                    const b = stmt.evaluate(allocator) catch |err| {
+                    const b = stmt.evaluate(allocator, env) catch |err| {
                         std.log.err("\x1b[31m{any}\x1b[0m", .{err});
                         std.debug.print("> ", .{});
                         continue;
                     };
-
-                    const a = b.?;
-                    defer a.deinit(allocator);
-                    Util.printExpr(a);
+                    defer b.?.deinit(allocator);
+                    Util.printExpr(b.?);
                 },
                 .varDeclaration => {
-                    Util.printExpr(stmt.varDeclaration.initializer);
+                    _ = stmt.evaluate(allocator, env) catch |err| {
+                        std.log.err("\x1b[31m{any}\x1b[0m", .{err});
+                        std.debug.print("> ", .{});
+                    };
+                    continue;
                 },
             }
         }
         std.debug.print("> ", .{});
+    } else |errs| switch (errs) {
+        error.StreamTooLong,
+        error.EndOfStream,
+        error.ReadFailed,
+        => |e| return e,
     }
 }
 
