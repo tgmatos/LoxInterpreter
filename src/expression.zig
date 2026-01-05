@@ -30,6 +30,7 @@ pub const Expr = union(enum) {
     binary: *Binary,
     grouping: *Grouping,
     variable: *Variable,
+    assign: *Assign,
 
     pub fn evaluate(expr: *Self, allocator: Allocator, env: *Environment) RuntimeError!*Expr {
         switch (expr.*) {
@@ -55,7 +56,9 @@ pub const Expr = union(enum) {
             .variable => {
                 // Todo: return a copy(?)
                 return try Variable.evaluate(expr.variable.*, allocator, env);
-                // return expr;
+            },
+            .assign => {
+                return try Assign.evaluate(expr.assign.*, allocator, env);
             },
         }
     }
@@ -85,6 +88,11 @@ pub const Expr = union(enum) {
             },
 
             .variable => |v| {
+                v.name.deinit(allocator);
+                allocator.destroy(v);
+            },
+            .assign => |v| {
+                v.expr.deinit(allocator);
                 v.name.deinit(allocator);
                 allocator.destroy(v);
             },
@@ -500,6 +508,44 @@ pub const Variable = struct {
     }
 };
 
+pub const Assign = struct {
+    name: *Token,
+    expr: *Expr,
+
+    pub fn create(allocator: Allocator, token: *Token, expr: *Expr, env: *Environment) !*Expr {
+        const assing: *Assign = allocator.create(Assign);
+        const newExpr: *Expr = allocator.create(Expr);
+        const cpyToken: *Token = copyToken(allocator, token);
+
+        const evaluated_expr: *Expr = expr.evaluate(allocator, env);
+
+        assing.* = .{ .expr = evaluated_expr, .name = cpyToken };
+        newExpr.* = .{ .assign = assing };
+        return assing;
+    }
+
+    pub fn evaluate(assign: Assign, allocator: Allocator, env: *Environment) !*Expr {
+        const str = try allocator.alloc(u8, assign.name.lexeme.len);
+        errdefer allocator.free(str);
+        @memcpy(str, assign.name.lexeme);
+
+        if (activeTag(assign.expr.*) == Expr.literal) {
+            const cpyExpr: *Expr = try copyExpr(allocator, assign.expr);
+            try env.define(allocator, str, cpyExpr);
+
+            const expr: *Expr = try env.get(assign.name.lexeme);
+            const result: *Expr = try copyExpr(allocator, expr);
+            return result;
+        }
+
+        const evalResult: *Expr = try assign.expr.evaluate(allocator, env);
+        try env.define(allocator, str, evalResult);
+        const expr: *Expr = try env.get(assign.name.lexeme);
+        const result: *Expr = try copyExpr(allocator, expr);
+        return result;
+    }
+};
+
 fn copyToken(allocator: Allocator, source: *Token) !*Token {
     const dst: *Token = try allocator.create(Token);
 
@@ -525,6 +571,31 @@ fn copyToken(allocator: Allocator, source: *Token) !*Token {
 
     dst.* = .{ .kind = source.kind, .lexeme = lexeme, .line = source.line, .literal = literalNullable };
     return dst;
+}
+
+fn copyExpr(allocator: Allocator, expr: *Expr) !*Expr {
+    switch (expr.*) {
+        .literal => {
+            const literal: *Literal = try allocator.create(Literal);
+            const cpyExpr: *Expr = try allocator.create(Expr);
+
+            if (activeTag(expr.literal.*) == Literal.string) {
+                const str = try allocator.alloc(u8, expr.literal.string.len);
+                @memcpy(str, expr.literal.string);
+                literal.* = expr.literal.*;
+                literal.*.string = str;
+            } else {
+                literal.* = expr.literal.*;
+            }
+
+            cpyExpr.* = .{ .literal = literal };
+            return cpyExpr;
+        },
+
+        else => {
+            return RuntimeError.InvalidExpr;
+        },
+    }
 }
 
 // program        → statement* EOF ;

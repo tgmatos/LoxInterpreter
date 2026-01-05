@@ -86,10 +86,8 @@ fn runPrompt() !void {
         }
         std.debug.print("> ", .{});
     } else |errs| switch (errs) {
-        error.StreamTooLong,
-        error.EndOfStream,
-        error.ReadFailed,
-        => |e| return e,
+        error.StreamTooLong, error.ReadFailed => |e| return e,
+        error.EndOfStream => return,
     }
 }
 

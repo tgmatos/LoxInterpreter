@@ -11,6 +11,8 @@ const Expr = E.Expr;
 const Literal = E.Literal;
 // const allocator = std.testing.allocator;
 const allocator = std.heap.page_allocator;
+const Env = @import("environment.zig");
+const Environment = Env.Environment;
 
 const Util = @import("util.zig");
 const pretty = @import("pretty.zig");
@@ -62,7 +64,7 @@ test "Test Strings" {
 }
 
 test "Test String Error Parsing" {
-    const source = "\"testando";
+    const source = "\"testando;";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
@@ -77,28 +79,27 @@ test "Test String Error Parsing" {
 }
 
 test "Test Numbers" {
-    const source = "1.337";
+    const source = "1.337;";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
     const ts = try scanner.scanTokens(source);
-    //defer ts.deinit();
 
-    try std.testing.expectEqual(@as(usize, 2), ts.items.len);
+    try std.testing.expectEqual(@as(usize, 3), ts.items.len);
     try std.testing.expectEqual(TokenType.NUMBER, ts.items[0].kind);
     try std.testing.expectEqual(1.337, ts.items[0].literal.?.number);
 }
 
 test "Test Keywords" {
-    const source = "5 - (2 * 3) < 4 == false";
+    const source = "5 - (2 * 3) < 4 == false;";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
     const ts = try scanner.scanTokens(source);
 
-    const expectedTokenTypes = [_]TokenType{ .NUMBER, .MINUS, .LEFT_PAREN, .NUMBER, .STAR, .NUMBER, .RIGHT_PAREN, .LESS, .NUMBER, .EQUAL_EQUAL, .FALSE, .EOF };
+    const expectedTokenTypes = [_]TokenType{ .NUMBER, .MINUS, .LEFT_PAREN, .NUMBER, .STAR, .NUMBER, .RIGHT_PAREN, .LESS, .NUMBER, .EQUAL_EQUAL, .FALSE, .SEMICOLON, .EOF };
 
     try std.testing.expectEqual(expectedTokenTypes.len, ts.items.len);
     for (ts.items, expectedTokenTypes) |item, token| {
@@ -110,17 +111,10 @@ test "Test Keywords" {
     try std.testing.expectEqual(@as(f64, 2.0), ts.items[3].literal.?.number);
     try std.testing.expectEqual(@as(f64, 3.0), ts.items[5].literal.?.number);
     try std.testing.expectEqual(@as(f64, 4.0), ts.items[8].literal.?.number);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-    _ = expr;
-    // std.debug.print("{any}\n", .{expr.*});
-
-    // Util.printAST(expr);
 }
 
 test "Check Binary Evaluation" {
-    const source = "((2 + 2) - (1 + 2)) * (3 * 2)";
+    const source = "((2 + 2) - (1 + 2)) * (3 * 2);";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
@@ -130,12 +124,16 @@ test "Check Binary Evaluation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.number == 6);
+    const env: *Environment = try Env.Environment.init(allocator);
+
+    for (expr.items) |e| {
+        const a = try e.evaluate(allocator, env);
+        std.debug.assert(a.?.literal.number == 6);
+    }
 }
 
 test "Check Concatenation Evaluation" {
-    const source = "\"testando \" + \"isso\"";
+    const source = "\"testando \" + \"isso\";";
 
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
@@ -145,88 +143,104 @@ test "Check Concatenation Evaluation" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(std.mem.eql(u8, a.literal.string, "testando isso"));
+    const env: *Environment = try Env.Environment.init(allocator);
+
+    for (expr.items) |e| {
+        const a = try e.evaluate(allocator, env);
+        std.debug.assert(std.mem.eql(u8, a.?.literal.string, "testando isso"));
+    }
 }
 
 test "Check truthy" {
-    const source = "(2 >= 2) == (3 < 1)";
-
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
-
-    const ts = try scanner.scanTokens(source);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.boolean == false);
+    const result = try evaluateSource("(2 >= 2) == (3 < 1);");
+    std.debug.assert(result.?.literal.boolean == false);
 }
 
 test "Check Unary Negation" {
-    const source = "-5";
-
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
-
-    const ts = try scanner.scanTokens(source);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.number == -5);
+    const result = try evaluateSource("-5;");
+    std.debug.assert(result.?.literal.number == -5);
 }
 
 test "Check Grouping Evaluation" {
-    const source = "(3 + 2) * 2";
-
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
-
-    const ts = try scanner.scanTokens(source);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.number == 10);
+    const result = try evaluateSource("(3 + 2) * 2;");
+    std.debug.assert(result.?.literal.number == 10);
 }
 
 test "Check Binary Subtraction" {
-    const source = "10 - 4";
-
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
-
-    const ts = try scanner.scanTokens(source);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.number == 6);
+    const result = try evaluateSource("10 - 4;");
+    std.debug.assert(result.?.literal.number == 6);
 }
 
 test "Check Binary Multiplication" {
-    const source = "3 * 4";
-
-    var scanner = try Scanner.init(allocator);
-    defer scanner.deinit();
-
-    const ts = try scanner.scanTokens(source);
-
-    var parser: Parser = Parser.init(allocator, &ts);
-    const expr = try parser.parser();
-
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.number == 12);
+    const result = try evaluateSource("3 * 4;");
+    std.debug.assert(result.?.literal.number == 12);
 }
 
-test "Check true == false" {
-    const source = "(true == true)";
+test "Check true == true" {
+    const result = try evaluateSource("(true == true);");
+    std.debug.assert(result.?.literal.boolean == true);
+}
 
+test "Check Complex Precedence" {
+    const result = try evaluateSource("5 + 2 * 10 / (2 + 3);");
+    std.debug.assert(result.?.literal.number == 9);
+}
+
+test "Check String Equality" {
+    const result = try evaluateSource("\"hello\" == \"hello\";");
+    std.debug.assert(result.?.literal.boolean == true);
+}
+
+test "Variable Declaration" {
+    const source = "var a = 10; a;";
+    const result = try evaluateSource(source);
+
+    std.debug.assert(result.?.literal.number == 10);
+}
+
+test "Multiple Variables" {
+    const source =
+        \\var width = 10;
+        \\var height = 20;
+        \\width * height;
+    ;
+    const result = try evaluateSource(source);
+
+    std.debug.assert(result.?.literal.number == 200);
+}
+
+test "Uninitialized Variable" {
+    const source = "var a; a;";
+    const result = try evaluateSource(source);
+
+    // This assumes your Value type has a 'nil' or 'none' literal type
+    // Adjust based on your specific implementation
+
+    std.debug.assert(result.?.literal.* == .nil);
+}
+
+// test "Variable Shadowing" {
+//     const source =
+//         \\var global = 1;
+//         \\{
+//         \\  var global = 2;
+//         \\}
+//         \\global;
+//     ;
+//     const result = try evaluateSource(source);
+
+//     // The inner 'global' should disappear, leaving the original '1'
+//     std.debug.assert(result.?.literal.number == 1);
+// }
+
+test "Variable Reassignment" {
+    const source = "var x = 5; x = x + 10;";
+    const result = try evaluateSource(source);
+
+    std.debug.assert(result.?.literal.number == 15);
+}
+
+fn evaluateSource(source: []const u8) !?*Expr {
     var scanner = try Scanner.init(allocator);
     defer scanner.deinit();
 
@@ -235,8 +249,15 @@ test "Check true == false" {
     var parser: Parser = Parser.init(allocator, &ts);
     const expr = try parser.parser();
 
-    const a = try expr.evaluate(allocator);
-    std.debug.assert(a.literal.boolean == true);
+    const env = try Env.Environment.init(allocator);
+    // If your environment needs to be freed, uncomment the next line:
+    defer env.deinit(allocator);
+
+    var last_result: ?*Expr = null;
+    for (expr.items) |e| {
+        last_result = try e.evaluate(allocator, env);
+    }
+    return last_result;
 }
 
 // The *specifier* has several options for types:

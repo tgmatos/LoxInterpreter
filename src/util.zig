@@ -8,6 +8,8 @@ const Literal = E.Literal;
 const Unary = E.Unary;
 const Binary = E.Binary;
 const Grouping = E.Grouping;
+const Variable = E.Variable;
+const Assign = E.Assign;
 
 const S = @import("statement.zig");
 const Statement = S.Statement;
@@ -34,6 +36,7 @@ pub fn printExpr(expr: *Expr) void {
             }
         },
         .variable => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.variable.name}),
+        .assign => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.assign.name}),
     }
 }
 
@@ -47,6 +50,7 @@ pub fn printAST(expr: *Expr) void {
         .unary => |value| printUnary(value),
         .binary => |value| printBinary(value),
         .grouping => |value| printGrouping(value),
+        .variable => |value| printVariable(value),
     }
 }
 
@@ -68,4 +72,13 @@ fn printBinary(binary: *Binary) void {
 fn printGrouping(grouping: *Grouping) void {
     std.debug.print("\n\nGrouping: {any}\n\n", .{grouping.expr.*});
     printAST(grouping.expr);
+}
+
+fn printVariable(variable: *Variable) void {
+    std.debug.print("{any}\n", .{variable.name.*});
+}
+
+fn printAssign(assign: *Assign) void {
+    std.debug.print("{any}\n", .{assign.name.*});
+    printAST(assign.expr.*);
 }

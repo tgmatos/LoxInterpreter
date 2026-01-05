@@ -5,6 +5,7 @@ const OutOfMemory = std.mem.Allocator.Error.OutOfMemory;
 const T = @import("token.zig");
 const Token = T.Token;
 const TokenType = T.TokenType;
+const ValueLiteral = T.Literal;
 
 const E = @import("expression.zig");
 const Expr = E.Expr;
@@ -14,6 +15,7 @@ const Literal = E.Literal;
 const LiteralType = E.LiteralType;
 const Grouping = E.Grouping;
 const Variable = E.Variable;
+const Assign = E.Assign;
 
 const S = @import("statement.zig");
 const Statement = S.Statement;
@@ -114,26 +116,34 @@ pub const Parser = struct {
     }
 
     fn expression(self: *Self) ParserError!*Expr {
-        return try self.comma();
+        return try self.assignment();
     }
 
-    fn comma(self: *Self) ParserError!*Expr {
+    fn assignment(self: *Self) ParserError!*Expr {
         if (self.validate_left_operand()) {
             return ParserError.MissingLeftOperandError;
         }
 
-        var expr: *Expr = try self.equality();
+        const expr: *Expr = try self.equality();
         errdefer expr.deinit(self.allocator);
 
-        const matches = [_]TokenType{.COMMA};
+        if (self.match_one(.EQUAL)) {
+            // const equals: *Token = self.previous(); // Probably need to copy
+            const value: *Expr = try self.assignment();
 
-        while (self.match(&matches)) {
-            const operator: *Token = self.previous();
+            if (std.meta.activeTag(expr.*) == Expr.variable) {
+                const newExpr: *Expr = try self.allocator.create(Expr);
+                const assign: *Assign = try self.allocator.create(Assign);
 
-            const right: *Expr = try self.equality();
-            errdefer right.deinit(self.allocator);
+                const name: *Token = try copyToken(self.allocator, expr.variable.name);
 
-            expr = try Binary.create(self.allocator, expr, operator, right);
+                assign.* = .{ .name = name, .expr = value };
+                newExpr.* = .{ .assign = assign };
+                expr.deinit(self.allocator);
+                return newExpr;
+            }
+
+            return ParserError.InvalidToken;
         }
 
         return expr;
@@ -328,7 +338,8 @@ pub const Parser = struct {
     }
 
     fn validate_left_operand(self: *Self) bool {
-        // MINUS is removed from the matches because it doesn't need to have a left hand operator. It can be used with a number like -5, and clearly it doesn't have a left hand operator.
+        // MINUS is removed from the matches because it doesn't need to have a left hand operator.
+        // It can be used with a number like -5, and clearly it doesn't have a left hand operator.
         const matches = [_]TokenType{
             .EQUAL_EQUAL,
             .BANG_EQUAL,
@@ -392,6 +403,33 @@ pub const Parser = struct {
         return self.tokens.items[self.current - 1];
     }
 };
+
+fn copyToken(allocator: std.mem.Allocator, source: *Token) !*Token {
+    const dst: *Token = try allocator.create(Token);
+
+    const lexeme = try allocator.alloc(u8, source.lexeme.len);
+    @memcpy(lexeme, source.lexeme);
+
+    var literalNullable: ?*ValueLiteral = null;
+
+    if (source.literal) |l| {
+        literalNullable = try allocator.create(ValueLiteral);
+
+        switch (l.*) {
+            .string => {
+                const strLiteral = try allocator.alloc(u8, l.string.len);
+                @memcpy(strLiteral, l.string);
+                literalNullable.?.* = .{ .string = strLiteral };
+            },
+            .number => {
+                literalNullable.?.* = .{ .number = l.number };
+            },
+        }
+    }
+
+    dst.* = .{ .kind = source.kind, .lexeme = lexeme, .line = source.line, .literal = literalNullable };
+    return dst;
+}
 
 // expression     → comma
 // comma          → equality ( (",") equality)*
