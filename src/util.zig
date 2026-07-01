@@ -30,7 +30,7 @@ pub fn printExpr(expr: *Expr) void {
         .literal => {
             switch (expr.literal.*) {
                 .number => std.debug.print("\x1b[32m{d}\x1b[0m\n", .{expr.literal.number}),
-                .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{expr.literal.string}),
+                .string => std.debug.print("\x1b[32m\"{s}\"\x1b[0m\n", .{expr.literal.string.value.*}),
                 .boolean => std.debug.print("\x1b[32m{any}\x1b[0m\n", .{expr.literal.boolean}),
                 .nil => std.debug.print("\x1b[32mnil\x1b[0m\n", .{}),
             }

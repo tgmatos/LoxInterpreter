@@ -15,6 +15,12 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const zigrc_dep = b.dependency("zigrc", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const zigrc_mod = zigrc_dep.module("zigrc");
+
     const lib = b.addLibrary(.{
         .name = "interpreter",
         .linkage = .static,
@@ -26,6 +32,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
         }),
     });
+    lib.root_module.addImport("zigrc", zigrc_mod);
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
@@ -39,9 +46,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .target = target,
         }),
-        .use_llvm = true,
-        .use_lld = true,
+        .use_llvm = false,
+        .use_lld = false,
     });
+    exe.root_module.addImport("zigrc", zigrc_mod);
     exe.root_module.stack_check = false;
 
     // This declares intent for the executable to be installed into the
@@ -91,6 +99,8 @@ pub fn build(b: *std.Build) void {
             .target = target,
         }),
     });
+
+    exe_unit_tests.root_module.addImport("zigrc", zigrc_mod);
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 

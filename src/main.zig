@@ -32,17 +32,20 @@ fn runPrompt() !void {
     defer _ = gpa.deinit();
     const allocator: std.mem.Allocator = gpa.allocator();
 
-    var stdin: std.fs.File = std.fs.File.stdin();
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
+    var stdin = std.Io.File.stdin();
     var stdin_buffer: [1024 * 1024]u8 = undefined;
-    var reader = stdin.readerStreaming(&stdin_buffer);
-    var input: *std.io.Reader = &reader.interface;
+    var reader = stdin.readerStreaming(io, &stdin_buffer);
     std.debug.print("> ", .{});
 
     // Attention here, maybe the env should not be "global"
     const env: *Environment = try Environment.init(allocator);
     defer env.deinit(allocator);
 
-    while (input.takeDelimiterInclusive('\n')) |x| {
+    while (reader.interface.takeDelimiterInclusive('\n')) |x| {
         var scanner = try Scanner.init(allocator);
         const ts = try scanner.scanTokens(x);
         defer scanner.deinit();

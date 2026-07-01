@@ -1,6 +1,6 @@
 const std = @import("std");
-const StringHashMap = std.hash_map.StringHashMap;
 const Allocator = std.mem.Allocator;
+const StringHashMap = std.StringHashMap;
 
 const E = @import("expression.zig");
 const Expr = E.Expr;
@@ -11,10 +11,6 @@ const Statement = S.Statement;
 pub const EnvironmentError = error{
     UndefinedVariable,
 };
-
-const red = "\x1b[31m";
-const green = "\x1b[32m";
-const reset = "\x1b[0m";
 
 pub const Environment = struct {
     const Self = @This();
@@ -42,7 +38,6 @@ pub const Environment = struct {
     }
 
     pub fn define(self: *Self, allocator: Allocator, name: []u8, value: *Expr) !void {
-        // GAMBIARRA
         if (self.map.contains(name)) {
             const key = self.map.getKey(name).?;
             const previousValue: *Expr = self.map.get(name).?;

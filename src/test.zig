@@ -147,7 +147,7 @@ test "Check Concatenation Evaluation" {
 
     for (expr.items) |e| {
         const a = try e.evaluate(allocator, env);
-        std.debug.assert(std.mem.eql(u8, a.?.literal.string, "testando isso"));
+        std.debug.assert(std.mem.eql(u8, a.?.literal.string.value.*, "testando isso"));
     }
 }
 

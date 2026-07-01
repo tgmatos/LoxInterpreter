@@ -1,6 +1,8 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const OutOfMemory = std.mem.Allocator.Error.OutOfMemory;
+const zigrc = @import("zigrc");
+const Rc = zigrc.Rc;
 
 const T = @import("token.zig");
 const Token = T.Token;
@@ -281,7 +283,8 @@ pub const Parser = struct {
                 _ = self.advance();
                 const str = try self.allocator.alloc(u8, self.previous().literal.?.string.len);
                 @memcpy(str, self.previous().literal.?.string);
-                return try Literal.create(self.allocator, Literal{ .string = str });
+                const rc_str = try Rc([]u8).init(self.allocator, str);
+                return try Literal.create(self.allocator, Literal{ .string = rc_str });
             },
 
             // Handle the parens

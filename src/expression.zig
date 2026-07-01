@@ -1,5 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const zigrc = @import("zigrc");
+const Rc = zigrc.Rc;
 
 const Util = @import("util.zig");
 
@@ -38,10 +40,7 @@ pub const Expr = union(enum) {
                 const literal: *Literal = try allocator.create(Literal);
 
                 if (activeTag(expr.literal.*) == Literal.string) {
-                    const str = try allocator.alloc(u8, expr.literal.string.len);
-                    @memcpy(str, expr.literal.string);
-                    literal.* = expr.literal.*;
-                    literal.*.string = str;
+                    literal.* = .{ .string = expr.literal.string.retain() };
                 } else {
                     literal.* = expr.literal.*;
                 }
@@ -67,7 +66,9 @@ pub const Expr = union(enum) {
         switch (self.*) {
             .literal => |v| {
                 if (activeTag(v.*) == Literal.string) {
-                    allocator.free(v.string);
+                    if (v.string.releaseUnwrap()) |s| {
+                        allocator.free(s);
+                    }
                 }
                 allocator.destroy(v);
             },
@@ -103,21 +104,15 @@ pub const Expr = union(enum) {
 
 pub const Literal = union(enum) {
     number: f64,
-    string: []u8,
+    string: Rc([]u8),
     boolean: bool,
     nil: void,
 
     pub fn create(allocator: Allocator, value: Literal) !*Expr {
         const literal = try allocator.create(Literal);
         const expr = try allocator.create(Expr);
-        switch (value) {
-            .number => literal.* = value,
-            .string => literal.* = value,
-            .boolean => literal.* = value,
-            .nil => literal.* = value,
-        }
+        literal.* = value;
         expr.* = .{ .literal = literal };
-
         return expr;
     }
 };
@@ -302,11 +297,11 @@ pub const Binary = struct {
                 if (leftTag == Literal.string) {
                     switch (rightTag) {
                         .string => {
-                            const str = std.fmt.allocPrint(allocator, "{s}{s}", .{ left.literal.string, right.literal.string }) catch |err| {
+                            const str = std.fmt.allocPrint(allocator, "{s}{s}", .{ left.literal.string.value.*, right.literal.string.value.* }) catch |err| {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            literal.* = Literal{ .string = str };
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
@@ -318,33 +313,33 @@ pub const Binary = struct {
                                 @panic("Aborting");
                             };
 
-                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, result }) catch |err| {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string.value.*, result }) catch |err| {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            literal.* = Literal{ .string = str };
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
                         .boolean => {
                             switch (right.literal.boolean) {
                                 true => {
-                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "true" });
-                                    literal.* = Literal{ .string = str };
+                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string.value.*, "true" });
+                                    literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                                     expr.* = .{ .literal = literal };
                                     return expr;
                                 },
                                 false => {
-                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "false" });
-                                    literal.* = Literal{ .string = str };
+                                    const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string.value.*, "false" });
+                                    literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                                     expr.* = .{ .literal = literal };
                                     return expr;
                                 },
                             }
                         },
                         .nil => {
-                            const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string, "nil" });
-                            literal.* = Literal{ .string = str };
+                            const str = try std.mem.concat(allocator, u8, &[_][]const u8{ left.literal.string.value.*, "nil" });
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
@@ -354,11 +349,11 @@ pub const Binary = struct {
                 if (rightTag == Literal.string) {
                     switch (leftTag) {
                         .string => {
-                            const str = std.fmt.allocPrint(allocator, "{s}{s}", .{ left.literal.string, right.literal.string }) catch |err| {
+                            const str = std.fmt.allocPrint(allocator, "{s}{s}", .{ left.literal.string.value.*, right.literal.string.value.* }) catch |err| {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            literal.* = Literal{ .string = str };
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
@@ -368,42 +363,42 @@ pub const Binary = struct {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ result, right.literal.string }) catch |err| {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ result, right.literal.string.value.* }) catch |err| {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            literal.* = Literal{ .string = str };
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
                         .boolean => {
                             switch (left.literal.boolean) {
                                 true => {
-                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "true", right.literal.string }) catch |err| {
+                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "true", right.literal.string.value.* }) catch |err| {
                                         std.log.err("Error on concatenation string. {any}", .{err});
                                         @panic("Aborting");
                                     };
-                                    literal.* = Literal{ .string = str };
+                                    literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                                     expr.* = .{ .literal = literal };
                                     return expr;
                                 },
                                 false => {
-                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "false", right.literal.string }) catch |err| {
+                                    const str = std.mem.concat(allocator, u8, &[_][]const u8{ "false", right.literal.string.value.* }) catch |err| {
                                         std.log.err("Error on concatenation string. {any}", .{err});
                                         @panic("Aborting");
                                     };
-                                    literal.* = Literal{ .string = str };
+                                    literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                                     expr.* = .{ .literal = literal };
                                     return expr;
                                 },
                             }
                         },
                         .nil => {
-                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ "nil", right.literal.string }) catch |err| {
+                            const str = std.mem.concat(allocator, u8, &[_][]const u8{ "nil", right.literal.string.value.* }) catch |err| {
                                 std.log.err("Error on concatenation string. {any}", .{err});
                                 @panic("Aborting");
                             };
-                            literal.* = Literal{ .string = str };
+                            literal.* = Literal{ .string = try Rc([]u8).init(allocator, str) };
                             expr.* = .{ .literal = literal };
                             return expr;
                         },
@@ -439,7 +434,7 @@ pub const Binary = struct {
         switch (leftTag) {
             Literal.string => {
                 if (rightTag == Literal.string) {
-                    return std.mem.eql(u8, left.literal.string, right.literal.string);
+                    return std.mem.eql(u8, left.literal.string.value.*, right.literal.string.value.*);
                 }
             },
             Literal.number => {
@@ -489,10 +484,7 @@ pub const Variable = struct {
                 const literal: *Literal = try allocator.create(Literal);
 
                 if (activeTag(expr.literal.*) == Literal.string) {
-                    const str = try allocator.alloc(u8, expr.literal.string.len);
-                    @memcpy(str, expr.literal.string);
-                    literal.* = expr.literal.*;
-                    literal.*.string = str;
+                    literal.* = .{ .string = expr.literal.string.retain() };
                 } else {
                     literal.* = expr.literal.*;
                 }
@@ -580,10 +572,7 @@ fn copyExpr(allocator: Allocator, expr: *Expr) !*Expr {
             const cpyExpr: *Expr = try allocator.create(Expr);
 
             if (activeTag(expr.literal.*) == Literal.string) {
-                const str = try allocator.alloc(u8, expr.literal.string.len);
-                @memcpy(str, expr.literal.string);
-                literal.* = expr.literal.*;
-                literal.*.string = str;
+                literal.* = .{ .string = expr.literal.string.retain() };
             } else {
                 literal.* = expr.literal.*;
             }
